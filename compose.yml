@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:18
+    container_name: tradeup-postgres
+    environment:
+      POSTGRES_DB: tradeup
+      POSTGRES_USER: tradeup
+      POSTGRES_PASSWORD: tradeup
+    ports:
+      - "5432:5432"
+    volumes:
+      - tradeup-postgres-data:/var/lib/postgresql
+
+volumes:
+  tradeup-postgres-data:
