@@ -1,8 +1,8 @@
-\# TradeUp 개발 로드맵
+# TradeUp 개발 로드맵
 
 
 
-\## Phase 0. 프로젝트 기반 정의
+## Phase 0. 프로젝트 기반 정의
 
 
 
@@ -10,7 +10,7 @@
 
 
 
-\## Phase 1. 기본 백엔드 구현
+## Phase 1. 기본 백엔드 구현
 
 
 
@@ -18,7 +18,7 @@ Spring Boot와 JPA를 기반으로 TradeUp의 기본 기능을 구현한다.
 
 
 
-\## Phase 2. 데이터베이스 성능 개선
+## Phase 2. 데이터베이스 성능 개선
 
 
 
@@ -26,7 +26,7 @@ Spring Boot와 JPA를 기반으로 TradeUp의 기본 기능을 구현한다.
 
 
 
-\## Phase 3. 동시성 및 트랜잭션
+## Phase 3. 동시성 및 트랜잭션
 
 
 
@@ -34,7 +34,7 @@ Spring Boot와 JPA를 기반으로 TradeUp의 기본 기능을 구현한다.
 
 
 
-\## Phase 4. 캐시 및 비동기 처리
+## Phase 4. 캐시 및 비동기 처리
 
 
 
@@ -42,7 +42,7 @@ Redis와 비동기 처리 등을 도입하여 트래픽 증가에 대응할 수 
 
 
 
-\## Phase 5. 운영 환경 구축
+## Phase 5. 운영 환경 구축
 
 
 
@@ -50,7 +50,7 @@ AWS에 애플리케이션을 배포하고 모니터링 및 운영 환경을 구�
 
 
 
-\## Phase 6. 부하 테스트 및 확장
+## Phase 6. 부하 테스트 및 확장
 
 
 
@@ -58,7 +58,7 @@ AWS에 애플리케이션을 배포하고 모니터링 및 운영 환경을 구�
 
 
 
-\## Phase 7. AI-native Backend
+## Phase 7. AI-native Backend
 
 
 

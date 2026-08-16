@@ -1,4 +1,4 @@
-\# Development Environment
+# Development Environment
 
 
 
@@ -6,51 +6,51 @@ TradeUp의 기본 로컬 개발환경을 정의한다.
 
 
 
-\## Runtime
+## Runtime
 
 
 
-\- Java: Eclipse Temurin JDK 25
+- Java: Eclipse Temurin JDK 25
 
-\- Spring Boot: 4.1.0
-
-
-
-\## Build
+- Spring Boot: 4.1.0
 
 
 
-\- Gradle
-
-\- Kotlin DSL
+## Build
 
 
 
-\## Database
+- Gradle
+
+- Kotlin DSL
 
 
 
-\- PostgreSQL 18
-
-\- Docker Compose를 통해 로컬 환경에서 실행한다.
+## Database
 
 
 
-\## Development Tools
+- PostgreSQL 18
+
+- Docker Compose를 통해 로컬 환경에서 실행한다.
 
 
 
-\- IntelliJ IDEA Ultimate
-
-\- Git
-
-\- Docker
-
-\- Docker Compose
+## Development Tools
 
 
 
-\## Environment Policy
+- IntelliJ IDEA Ultimate
+
+- Git
+
+- Docker
+
+- Docker Compose
+
+
+
+## Environment Policy
 
 
 

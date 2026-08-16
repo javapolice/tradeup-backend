@@ -1,8 +1,8 @@
-\# ADR-0001: Initial Technology Stack
+# ADR-0001: Initial Technology Stack
 
 
 
-\## Status
+## Status
 
 
 
@@ -10,7 +10,7 @@ Accepted
 
 
 
-\## Context
+## Context
 
 
 
@@ -34,7 +34,7 @@ AI Agent와 Tool Calling 방식으로 확장하는 것을 목표로 한다.
 
 
 
-\## Decision
+## Decision
 
 
 
@@ -42,27 +42,27 @@ AI Agent와 Tool Calling 방식으로 확장하는 것을 목표로 한다.
 
 
 
-\- Java 25 (LTS)
+- Java 25 (LTS)
 
-\- Spring Boot 4.1.0
+- Spring Boot 4.1.0
 
-\- Spring Data JPA
+- Spring Data JPA
 
-\- PostgreSQL 18
+- PostgreSQL 18
 
-\- Gradle (Kotlin DSL)
+- Gradle (Kotlin DSL)
 
-\- Docker Compose 기반 로컬 인프라
+- Docker Compose 기반 로컬 인프라
 
-\- Single Application
-
-
-
-\## Reason
+- Single Application
 
 
 
-\### Java 25
+## Reason
+
+
+
+### Java 25
 
 
 
@@ -76,7 +76,7 @@ AI Agent와 Tool Calling 방식으로 확장하는 것을 목표로 한다.
 
 
 
-\### Spring Boot 4.1
+### Spring Boot 4.1
 
 
 
@@ -90,7 +90,7 @@ Java 25와 호환되는 현재 세대의 Spring Boot를 사용한다.
 
 
 
-\### PostgreSQL 18
+### PostgreSQL 18
 
 
 
@@ -102,7 +102,7 @@ Java 25와 호환되는 현재 세대의 Spring Boot를 사용한다.
 
 
 
-\### Gradle Kotlin DSL
+### Gradle Kotlin DSL
 
 
 
@@ -116,21 +116,21 @@ Kotlin은 빌드 스크립트에만 사용한다.
 
 
 
-\## Alternatives
+## Alternatives
 
 
 
-\- Kotlin
+- Kotlin
 
-\- Java 21
+- Java 21
 
-\- MySQL
+- MySQL
 
-\- Gradle Groovy DSL
+- Gradle Groovy DSL
 
 
 
-\## Trade-offs
+## Trade-offs
 
 
 

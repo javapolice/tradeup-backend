@@ -1,8 +1,8 @@
-\# TradeUp 기술 선택 원칙
+# TradeUp 기술 선택 원칙
 
 
 
-\## 1. 기본 원칙
+## 1. 기본 원칙
 
 
 
@@ -32,7 +32,7 @@ TradeUp에서는 기술 자체를 사용해보는 것을 목표로 하지 않는
 
 
 
-\## 2. 초기 기술 방향
+## 2. 초기 기술 방향
 
 
 
@@ -44,19 +44,19 @@ TradeUp에서는 기술 자체를 사용해보는 것을 목표로 하지 않는
 
 
 
-\* Java 25 (LTS)
+* Java 25 (LTS)
 
-\* Spring Boot 4.1.0
+* Spring Boot 4.1.0
 
-\* Spring Data JPA
+* Spring Data JPA
 
-\* PostgreSQL 18
+* PostgreSQL 18
 
-\* Gradle (Kotlin DSL)
+* Gradle (Kotlin DSL)
 
-\* Docker Compose 기반 로컬 인프라
+* Docker Compose 기반 로컬 인프라
 
-\* 단일 애플리케이션 구조
+* 단일 애플리케이션 구조
 
 
 
@@ -68,7 +68,7 @@ Redis, 메시지 브로커, 검색 엔진, 컨테이너 오케스트레이션 �
 
 
 
-\## 3. 기술 도입 기록
+## 3. 기술 도입 기록
 
 
 
@@ -80,17 +80,17 @@ Redis, 메시지 브로커, 검색 엔진, 컨테이너 오케스트레이션 �
 
 
 
-\* Problem
+* Problem
 
-\* Alternatives
+* Alternatives
 
-\* Decision
+* Decision
 
-\* Reason
+* Reason
 
-\* Result
+* Result
 
-\* Trade-off
+* Trade-off
 
 
 
