@@ -52,6 +52,8 @@ AI Agent와 Tool Calling 방식으로 확장하는 것을 목표로 한다.
 
 \- Gradle (Kotlin DSL)
 
+\- Docker Compose 기반 로컬 인프라
+
 \- Single Application
 
 

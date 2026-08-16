@@ -54,6 +54,8 @@ TradeUp에서는 기술 자체를 사용해보는 것을 목표로 하지 않는
 
 \* Gradle (Kotlin DSL)
 
+\* Docker Compose 기반 로컬 인프라
+
 \* 단일 애플리케이션 구조
 
 
