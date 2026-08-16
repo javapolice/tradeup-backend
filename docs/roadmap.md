@@ -2,11 +2,15 @@
 
 
 
-## Phase 0. 프로젝트 기반 정의
+## Phase 0. 프로젝트 기반 정의 ✅
 
 
 
-프로젝트 목표, MVP 범위, 핵심 도메인, 개발 원칙을 정의한다.
+프로젝트 목표, MVP 범위, 핵심 도메인, 개발 원칙을 정의하고 
+Java25, Spring Boot 4.1, PostgreSQL 18, Docker Compose 기반의
+로컬 개발환경을 구성한다.
+
+**Status: Completed**
 
 
 
