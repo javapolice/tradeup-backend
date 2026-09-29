@@ -23,4 +23,16 @@ public class Member {
         this.email = email;
         this.nickname = nickname;
     }
+
+    public Long getId() {
+        return id;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public String getNickname() {
+        return nickname;
+    }
 }
