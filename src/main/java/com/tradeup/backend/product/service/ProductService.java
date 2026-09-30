@@ -3,9 +3,12 @@ package com.tradeup.backend.product.service;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
+import com.tradeup.backend.product.domain.ProductStatus;
 import com.tradeup.backend.product.repository.ProductRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Service
 @Transactional(readOnly = true)
@@ -38,4 +41,14 @@ public class ProductService {
 
         return productRepository.save(product);
     }
+
+    public Product getProduct(Long productId) {
+        return productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+    }
+
+    public List<Product> getSellingProducts() {
+        return productRepository.findAllByStatus(ProductStatus.SELLING);
+    }
+
 }
