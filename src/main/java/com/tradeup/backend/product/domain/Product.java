@@ -36,4 +36,28 @@ public class Product {
         this.price = price;
         this.status = ProductStatus.SELLING;
     }
+
+    public Long getId() {
+        return id;
+    }
+
+    public Member getSeller() {
+        return seller;
+    }
+
+    public String getTitle() {
+        return title;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public Long getPrice() {
+        return price;
+    }
+
+    public ProductStatus getStatus() {
+        return status;
+    }
 }
