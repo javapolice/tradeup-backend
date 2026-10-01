@@ -3,6 +3,7 @@ package com.tradeup.backend.product.controller;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.dto.ProductCreateRequest;
 import com.tradeup.backend.product.dto.ProductResponse;
+import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.service.ProductService;
 import org.springframework.web.bind.annotation.*;
 
@@ -48,4 +49,21 @@ public class ProductController {
                 .map(ProductResponse::from)
                 .toList();
     }
+
+    @PatchMapping("/{productId}")
+    public ProductResponse updateProduct(
+            @PathVariable Long productId,
+            @RequestBody ProductUpdateRequest request
+            ) {
+        Product product = productService.updateProduct(
+                productId,
+                request.sellerId(),
+                request.title(),
+                request.description(),
+                request.price()
+        );
+
+        return ProductResponse.from(product);
+    }
+
 }
