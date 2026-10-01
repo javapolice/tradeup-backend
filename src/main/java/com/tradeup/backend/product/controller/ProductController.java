@@ -66,4 +66,12 @@ public class ProductController {
         return ProductResponse.from(product);
     }
 
+    @DeleteMapping("/{productId}")
+    public void deleteProduct(
+            @PathVariable Long productId,
+            @RequestParam Long sellerId
+    ) {
+        productService.deleteProduct(productId, sellerId);
+    }
+
 }
