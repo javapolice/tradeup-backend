@@ -9,6 +9,8 @@ import com.tradeup.backend.wishlist.repository.WishlistRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @Transactional(readOnly = true)
 public class WishlistService {
@@ -45,6 +47,25 @@ public class WishlistService {
         Wishlist wishlist = new Wishlist(member, product);
 
         return wishlistRepository.save(wishlist);
+    }
+
+    @Transactional
+    public void deleteWishlist(
+            Long wishlistId,
+            Long memberId
+    ) {
+        Wishlist wishlist = wishlistRepository.findById(wishlistId)
+                .orElseThrow(() -> new IllegalArgumentException("찜을 찾을 수 없습니다."));
+
+        if(!wishlist.getMember().getId().equals(memberId)) {
+            throw new IllegalArgumentException("자신의 찜만 취소할 수 있습니다.");
+        }
+
+        wishlistRepository.delete(wishlist);
+    }
+
+    public List<Wishlist> getWishlists(Long memberId) {
+        return wishlistRepository.findAllByMemberId(memberId);
     }
 
 }
