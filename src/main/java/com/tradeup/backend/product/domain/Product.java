@@ -51,6 +51,12 @@ public class Product {
         this.price = price;
     }
 
+    public void validateDeletable() {
+        if(status != ProductStatus.SELLING) {
+            throw new IllegalStateException("판매 중인 상품만 삭제할 수 있습니다.");
+        }
+    }
+
     public Long getId() {
         return id;
     }
