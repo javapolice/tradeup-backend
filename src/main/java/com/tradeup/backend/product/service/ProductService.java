@@ -51,4 +51,24 @@ public class ProductService {
         return productRepository.findAllByStatus(ProductStatus.SELLING);
     }
 
+    @Transactional
+    public Product updateProduct(
+            Long productId,
+            Long sellerId,
+            String title,
+            String description,
+            Long price
+    ) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+
+        if(!product.getSeller().getId().equals(sellerId)) {
+            throw new IllegalArgumentException("상품 판매자만 수정할 수 있습니다.");
+        }
+
+        product.update(title, description, price);
+
+        return product;
+    }
+
 }
