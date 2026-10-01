@@ -37,6 +37,20 @@ public class Product {
         this.status = ProductStatus.SELLING;
     }
 
+    public void update(
+            String title,
+            String description,
+            Long price
+    ) {
+        if(status != ProductStatus.SELLING) {
+            throw new IllegalStateException("판매 중인 상품만 수정할 수 있습니다.");
+        }
+
+        this.title = title;
+        this.description = description;
+        this.price = price;
+    }
+
     public Long getId() {
         return id;
     }
