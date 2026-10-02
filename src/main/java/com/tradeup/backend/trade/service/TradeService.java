@@ -127,4 +127,12 @@ public class TradeService {
         return trade;
     }
 
+    public List<Trade> getPurchases(Long buyerId) {
+        return tradeRepository.findAllByBuyerId(buyerId);
+    }
+
+    public List<Trade> getProductTrades(Long productId) {
+        return tradeRepository.findAllByProductId(productId);
+    }
+
 }
