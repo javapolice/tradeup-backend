@@ -48,6 +48,14 @@ public class Trade {
         this.status = TradeStatus.REJECTED;
     }
 
+    public void complete(){
+        if (status != TradeStatus.ACCEPTED) {
+            throw new IllegalStateException("수락된 거래만 완료할 수 있습니다.");
+        }
+
+        this.status = TradeStatus.COMPLETED;
+    }
+
     public Long getId() {
         return id;
     }

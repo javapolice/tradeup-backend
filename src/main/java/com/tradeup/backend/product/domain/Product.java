@@ -65,6 +65,14 @@ public class Product {
         this.status = ProductStatus.RESERVED;
     }
 
+    public void sold() {
+        if (status != ProductStatus.RESERVED) {
+            throw new IllegalStateException("예약된 상품만 판매 완료할 수 있습니다.");
+        }
+
+        this.status = ProductStatus.SOLD;
+    }
+
     public Long getId() {
         return id;
     }
