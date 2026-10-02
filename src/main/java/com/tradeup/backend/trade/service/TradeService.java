@@ -88,4 +88,23 @@ public class TradeService {
         return trade;
     }
 
+    @Transactional
+    public Trade rejectTrade(
+            Long tradeId,
+            Long sellerId
+    ) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다."));
+
+        Product product = trade.getProduct();
+
+        if (!product.getSeller().getId().equals(sellerId)) {
+            throw new IllegalArgumentException("상품 판매자만 거래를 거절할 수 있습니다.");
+        }
+
+        trade.reject();
+
+        return trade;
+    }
+
 }
