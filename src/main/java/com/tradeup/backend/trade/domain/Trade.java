@@ -32,6 +32,22 @@ public class Trade {
         this.status = TradeStatus.REQUESTED;
     }
 
+    public void accept(){
+        if (status != TradeStatus.REQUESTED) {
+            throw new IllegalStateException("요청 중인 거래만 수락할 수 있습니다.");
+        }
+
+        this.status = TradeStatus.ACCEPTED;
+    }
+
+    public void reject(){
+        if (status != TradeStatus.REQUESTED) {
+            throw new IllegalStateException("요청 중인 거래만 거절할 수 있습니다.");
+        }
+
+        this.status = TradeStatus.REJECTED;
+    }
+
     public Long getId() {
         return id;
     }

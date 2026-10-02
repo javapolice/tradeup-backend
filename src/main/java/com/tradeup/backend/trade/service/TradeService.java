@@ -11,6 +11,8 @@ import com.tradeup.backend.trade.repository.TradeRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @Transactional(readOnly = true)
 public class TradeService {
@@ -55,6 +57,35 @@ public class TradeService {
         Trade trade = new Trade(product, buyer);
 
         return tradeRepository.save(trade);
+    }
+
+    @Transactional
+    public Trade acceptTrade(
+            Long tradeId,
+            Long sellerId
+    ) {
+        Trade trade = tradeRepository.findById(tradeId)
+                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다."));
+
+        Product product = trade.getProduct();
+
+        if (!product.getSeller().getId().equals(sellerId)) {
+            throw new IllegalArgumentException("상품 판매자만 거래를 수락할 수 있습니다.");
+        }
+
+        trade.accept();
+        product.reserve();
+
+        List<Trade> requestedTrades = tradeRepository.findAllByProductIdAndStatus(
+                product.getId(),
+                TradeStatus.REQUESTED
+        );
+
+        for (Trade requestedTrade : requestedTrades) {
+            requestedTrade.reject();
+        }
+
+        return trade;
     }
 
 }
