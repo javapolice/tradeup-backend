@@ -61,7 +61,7 @@ public class TradeController {
     }
 
     @GetMapping("/members/{memberId}/purchases")
-    public List<TradeResponse> getPurChases(
+    public List<TradeResponse> getPurchases(
             @PathVariable Long memberId
     ) {
         return tradeService.getPurchases(memberId)
