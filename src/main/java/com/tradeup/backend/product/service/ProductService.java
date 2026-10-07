@@ -5,6 +5,8 @@ import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
 import com.tradeup.backend.product.repository.ProductRepository;
+import com.tradeup.backend.trade.repository.TradeRepository;
+import com.tradeup.backend.wishlist.repository.WishlistRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,10 +18,14 @@ public class ProductService {
 
     private final ProductRepository productRepository;
     private final MemberRepository memberRepository;
+    private final TradeRepository tradeRepository;
+    private final WishlistRepository wishlistRepository;
 
-    public ProductService(ProductRepository productRepository, MemberRepository memberRepository) {
+    public ProductService(ProductRepository productRepository, MemberRepository memberRepository, TradeRepository tradeRepository, WishlistRepository wishlistRepository) {
         this.productRepository = productRepository;
         this.memberRepository = memberRepository;
+        this.tradeRepository = tradeRepository;
+        this.wishlistRepository = wishlistRepository;
     }
 
     @Transactional
@@ -84,6 +90,12 @@ public class ProductService {
         }
 
         product.validateDeletable();
+
+        if (tradeRepository.existsByProductId(productId)) {
+            throw new IllegalStateException("거래 이력이 있는 상품은 삭제할 수 없습니다");
+        }
+
+        wishlistRepository.deleteAllByProductId(productId);
 
         productRepository.delete(product);
     }
