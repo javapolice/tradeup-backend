@@ -272,6 +272,31 @@ class TradeServiceIntegrationTest {
     }
 
     @Test
+    void 판매자는_자신의_상품에_거래를_요청할_수_없고_실제_DB에_거래가_생성되지_않는다() {
+        // given
+        Member seller = memberRepository.save(
+                new Member("self-trade-seller@test.com", "self-trade-seller")
+        );
+
+        Product product = productRepository.save(
+                new Product(seller, "테스트 상품", "테스트 설명", 10000L)
+        );
+
+        entityManager.flush();
+        entityManager.clear();
+
+        // when & then
+        assertThatThrownBy(() -> tradeService.requestTrade(product.getId(), seller.getId()))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("자신의 상품은 구매할 수 없습니다.");
+
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(tradeRepository.findAllByProductId(product.getId())).isEmpty();
+    }
+
+    @Test
     void 거래_완료_상태가_실제_DB에_반영된다() {
         // given
         Member seller = memberRepository.save(
