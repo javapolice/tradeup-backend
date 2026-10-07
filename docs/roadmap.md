@@ -20,6 +20,20 @@ Java25, Spring Boot 4.1, PostgreSQL 18, Docker Compose 기반의
 
 Spring Boot와 JPA를 기반으로 TradeUp의 기본 기능을 구현한다.
 
+**Status: In Progress — Step 49 문서 동기화, 최종 검증 대기**
+
+- Member, Product, Wishlist, Trade의 기본 기능과 비즈니스 규칙 구현
+- Flyway V1~V4 기반 PostgreSQL 스키마 관리
+- Product/Trade 도메인 단위 테스트 및 TradeService Mockito 단위 테스트
+- 네 도메인의 실제 PostgreSQL 기반 Service 통합 테스트
+- Trade API의 MockMvc 통합 테스트
+
+Phase 1은 정상적인 순차 요청 흐름을 보장하는 수준이다. 최종 검증 Step 이후 종료 여부를 결정한다.
+
+## Phase 1.5. API 기반 정비 검토
+
+Security/JWT, 요청 값 Validation, Global Exception Handler 및 공통 오류 응답, HTTP 응답 상태 개선을 검토한다. 현재 구현 완료된 기능이 아니다.
+
 
 
 ## Phase 2. 데이터베이스 성능 개선

@@ -10,7 +10,13 @@
 
 Phase 0에서 프로젝트 목표, MVP 범위, 기술 선택 기준 및 로컬 개발환경 구성을 완료했습니다.
 
-현재 Phase 1에서 MVP 유스케이스와 비즈니스 규칙을 기반으로 기본 백엔드 설계 및 구현을 진행하고 있습니다.
+Member, Product, Wishlist, Trade의 기본 기능과 비즈니스 규칙을 구현했습니다. 현재 Step 49 문서 동기화 단계이며, 이후 최종 검증이 남아 있어 Phase 1은 아직 진행 중입니다.
+
+* Flyway로 PostgreSQL 스키마를 관리합니다.
+* Product/Trade 도메인 단위 테스트, TradeService Mockito 단위 테스트가 있습니다.
+* 네 도메인의 실제 PostgreSQL 기반 Service 통합 테스트와 Trade API의 MockMvc 통합 테스트가 있습니다.
+
+Security/JWT, 요청 값 Validation, Global Exception Handler는 미구현이며 Phase 1.5 검토 대상입니다. 성능 개선과 동시성 제어 등은 이후 Phase에서 다룹니다.
 
 ## Tech Stack
 
@@ -26,6 +32,9 @@ Phase 0에서 프로젝트 목표, MVP 범위, 기술 선택 기준 및 로컬 �
 ## Documentation
 
 * [MVP Requirements](docs/requirements.md)
+* [Domain Model](docs/domain-model.md)
+* [Database Design](docs/database-design.md)
+* [HTTP API](docs/api-design.md)
 * [Development Roadmap](docs/roadmap.md)
 * [Technology Decisions](docs/tech-decisions.md)
 * [Development Environment](docs/development-environment.md)
@@ -52,6 +61,8 @@ Phase 0에서 프로젝트 목표, MVP 범위, 기술 선택 기준 및 로컬 �
 ```docker compose ps```
 
 ### 2. Run Tests
+
+통합 테스트는 기본 설정의 실제 PostgreSQL(`localhost:5432/tradeup`)에 연결하므로 DB를 먼저 실행해야 합니다. Service 및 MockMvc 통합 테스트는 `@Transactional`로 각 테스트 종료 후 데이터를 rollback합니다.
 
 MacOS / Linux:
 
