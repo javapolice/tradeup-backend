@@ -14,7 +14,7 @@ Member, Product, Wishlist, Trade의 기본 기능과 비즈니스 규칙을 구�
 
 * Flyway로 PostgreSQL 스키마를 관리합니다.
 * Product/Trade 도메인 단위 테스트, TradeService Mockito 단위 테스트가 있습니다.
-* 네 도메인의 실제 PostgreSQL 기반 Service 통합 테스트와 Trade API의 MockMvc 통합 테스트가 있습니다.
+* Member, Product, Wishlist, Trade의 실제 PostgreSQL 기반 Service 통합 테스트와 Trade API의 MockMvc 통합 테스트가 있습니다.
 
 Security/JWT, 요청 값 Validation, Global Exception Handler는 미구현이며 Phase 1.5 검토 대상입니다. 성능 개선과 동시성 제어 등은 이후 Phase에서 다룹니다.
 
