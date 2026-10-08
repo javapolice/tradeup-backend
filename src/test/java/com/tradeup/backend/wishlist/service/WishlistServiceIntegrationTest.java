@@ -1,6 +1,7 @@
 package com.tradeup.backend.wishlist.service;
 
 import com.tradeup.backend.member.domain.Member;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.repository.ProductRepository;
@@ -18,6 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 @SpringBootTest
 @Transactional
 class WishlistServiceIntegrationTest {
+
+    private static final String PASSWORD_HASH =
+            new BCryptPasswordEncoder().encode("test-password");
 
     @Autowired
     private WishlistService wishlistService;
@@ -38,7 +42,7 @@ class WishlistServiceIntegrationTest {
     void 자신의_상품은_찜할_수_없다() {
         // given
         Member seller = memberRepository.save(
-                new Member("wishlist-seller@test.com", "wishlist-seller")
+                new Member("wishlist-seller@test.com", "wishlist-seller", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -64,11 +68,11 @@ class WishlistServiceIntegrationTest {
     void 동일_회원은_동일_상품을_중복으로_찜할_수_없다() {
         // given
         Member seller = memberRepository.save(
-                new Member("wishlist-seller@test.com", "wishlist-seller")
+                new Member("wishlist-seller@test.com", "wishlist-seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("wishlist-buyer@test.com", "wishlist-buyer")
+                new Member("wishlist-buyer@test.com", "wishlist-buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -97,15 +101,15 @@ class WishlistServiceIntegrationTest {
     void 다른_회원의_찜을_삭제할_수_없고_실제_DB에_유지된다() {
         // given
         Member seller = memberRepository.save(
-                new Member("wishlist-seller@test.com", "wishlist-seller")
+                new Member("wishlist-seller@test.com", "wishlist-seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("wishlist-buyer@test.com", "wishlist-buyer")
+                new Member("wishlist-buyer@test.com", "wishlist-buyer", PASSWORD_HASH)
         );
 
         Member otherMember = memberRepository.save(
-                new Member("wishlist-other@test.com", "wishlist-other")
+                new Member("wishlist-other@test.com", "wishlist-other", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(

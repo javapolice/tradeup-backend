@@ -20,7 +20,8 @@ public class MemberController {
     public MemberResponse signUp(@RequestBody MemberCreateRequest request) {
         Member member = memberService.signUp(
                 request.email(),
-                request.nickname()
+                request.nickname(),
+                request.password()
         );
         return MemberResponse.from(member);
     }

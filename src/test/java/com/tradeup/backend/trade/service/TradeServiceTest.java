@@ -1,6 +1,7 @@
 package com.tradeup.backend.trade.service;
 
 import com.tradeup.backend.member.domain.Member;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.repository.ProductRepository;
@@ -22,6 +23,9 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 class TradeServiceTest {
 
+    private static final String PASSWORD_HASH =
+            new BCryptPasswordEncoder().encode("test-password");
+
     @Mock
     private TradeRepository tradeRepository;
 
@@ -38,7 +42,7 @@ class TradeServiceTest {
     void 정상적으로_거래를_요청할_수_있다() {
         // given
         Member seller = mock(Member.class);
-        Member buyer = new Member("buyer@test.com", "buyer");
+        Member buyer = new Member("buyer@test.com", "buyer", PASSWORD_HASH);
 
         when(seller.getId()).thenReturn(1L);
 

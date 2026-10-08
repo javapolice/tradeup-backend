@@ -1,6 +1,7 @@
 package com.tradeup.backend.trade.service;
 
 import com.tradeup.backend.member.domain.Member;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
@@ -19,6 +20,9 @@ import static org.assertj.core.api.Assertions.*;
 @SpringBootTest
 @Transactional
 class TradeServiceIntegrationTest {
+
+    private static final String PASSWORD_HASH =
+            new BCryptPasswordEncoder().encode("test-password");
 
     @Autowired
     private TradeService tradeService;
@@ -44,7 +48,7 @@ class TradeServiceIntegrationTest {
         // given
         Member member = new Member(
                 "integration@test.com",
-                "integration"
+                "integration", PASSWORD_HASH
         );
 
         // when
@@ -58,11 +62,11 @@ class TradeServiceIntegrationTest {
     void 실제_DB에서_거래를_요청할_수_있다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -86,15 +90,15 @@ class TradeServiceIntegrationTest {
     void 거래를_수락하면_상품이_예약되고_다른_요청은_거절된다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyerA = memberRepository.save(
-                new Member("buyerA@test.com", "buyerA")
+                new Member("buyerA@test.com", "buyerA", PASSWORD_HASH)
         );
 
         Member buyerB = memberRepository.save(
-                new Member("buyerB@test.com", "buyerB")
+                new Member("buyerB@test.com", "buyerB", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -132,11 +136,11 @@ class TradeServiceIntegrationTest {
     void 수락된_거래를_완료하면_거래와_상품이_판매완료된다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -168,11 +172,11 @@ class TradeServiceIntegrationTest {
     void 거절된_거래는_같은_구매자가_다시_요청할_수_있다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -206,11 +210,11 @@ class TradeServiceIntegrationTest {
     void 같은_구매자는_같은_상품에_활성_거래를_중복_요청할_수_없다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -237,15 +241,15 @@ class TradeServiceIntegrationTest {
     void 판매자가_아니면_거래를_수락할_수_없다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Member otherMember = memberRepository.save(
-                new Member("other@test.com", "other")
+                new Member("other@test.com", "other", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -275,7 +279,7 @@ class TradeServiceIntegrationTest {
     void 판매자는_자신의_상품에_거래를_요청할_수_없고_실제_DB에_거래가_생성되지_않는다() {
         // given
         Member seller = memberRepository.save(
-                new Member("self-trade-seller@test.com", "self-trade-seller")
+                new Member("self-trade-seller@test.com", "self-trade-seller", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -300,11 +304,11 @@ class TradeServiceIntegrationTest {
     void 거래_완료_상태가_실제_DB에_반영된다() {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(

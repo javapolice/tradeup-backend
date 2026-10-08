@@ -1,6 +1,7 @@
 package com.tradeup.backend.trade.controller;
 
 import com.tradeup.backend.member.domain.Member;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
@@ -25,6 +26,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Transactional
 class TradeControllerIntegrationTest {
 
+    private static final String PASSWORD_HASH =
+            new BCryptPasswordEncoder().encode("test-password");
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -46,11 +50,11 @@ class TradeControllerIntegrationTest {
     void 거래를_요청하면_200이_반환된다() throws Exception {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -82,11 +86,11 @@ class TradeControllerIntegrationTest {
     void 거래를_수락하면_ACCEPTED가_반환된다() throws Exception {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
@@ -118,11 +122,11 @@ class TradeControllerIntegrationTest {
     void 거래를_완료하면_COMPLETED가_반환된다() throws Exception {
         // given
         Member seller = memberRepository.save(
-                new Member("seller@test.com", "seller")
+                new Member("seller@test.com", "seller", PASSWORD_HASH)
         );
 
         Member buyer = memberRepository.save(
-                new Member("buyer@test.com", "buyer")
+                new Member("buyer@test.com", "buyer", PASSWORD_HASH)
         );
 
         Product product = productRepository.save(
