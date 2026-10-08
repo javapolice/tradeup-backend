@@ -38,4 +38,19 @@ public class MemberService {
         return memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
     }
+
+    public Member login(String email, String password) {
+        String errorMsg = "이메일 또는 비밀번호가 올바르지 않습니다.";
+        Member member = memberRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException(errorMsg));
+
+        if (member.getPasswordHash() == null) {
+            throw new IllegalArgumentException(errorMsg);
+        }
+
+        if (!passwordEncoder.matches(password, member.getPasswordHash())) {
+            throw new IllegalArgumentException(errorMsg);
+        }
+
+        return member;
+    }
 }
