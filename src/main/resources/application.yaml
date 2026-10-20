@@ -9,3 +9,9 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: none
+
+jwt:
+  # Base64-encoded random key; decoded key must be at least 32 bytes for HS256.
+  # Required when JWT configuration is consumed; no fallback secret is provided.
+  secret-base64: ${TRADEUP_JWT_SECRET_BASE64}
+  access-token-expiration-seconds: 3600

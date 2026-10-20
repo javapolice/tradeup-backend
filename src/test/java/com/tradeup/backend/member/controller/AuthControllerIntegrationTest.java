@@ -1,5 +1,7 @@
 package com.tradeup.backend.member.controller;
 
+import com.jayway.jsonpath.JsonPath;
+import com.tradeup.backend.auth.jwt.JwtTokenProvider;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.member.service.MemberService;
@@ -38,13 +40,16 @@ class AuthControllerIntegrationTest {
     private MemberService memberService;
 
     @Autowired
+    private JwtTokenProvider jwtTokenProvider;
+
+    @Autowired
     private PasswordEncoder passwordEncoder;
 
     @Autowired
     private EntityManager entityManager;
 
     @Test
-    void 실제_회원가입으로_저장된_BCrypt_회원은_로그인하고_응답에_비밀번호를_노출하지_않는다() throws Exception {
+    void 실제_회원가입으로_저장된_BCrypt_회원은_로그인하고_회원정보_없이_유효한_JWT를_받는다() throws Exception {
         Member member = signUpThroughApi();
 
         assertThat(passwordEncoder).isInstanceOf(BCryptPasswordEncoder.class);
@@ -56,15 +61,20 @@ class AuthControllerIntegrationTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(loginBody(member.getEmail(), "login-password")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(3))
-                .andExpect(jsonPath("$.id").value(member.getId()))
-                .andExpect(jsonPath("$.email").value(member.getEmail()))
-                .andExpect(jsonPath("$.nickname").value(member.getNickname()))
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$.accessToken").isString())
+                .andExpect(jsonPath("$.accessToken").isNotEmpty())
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.email").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.nickname").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.password").doesNotHaveJsonPath())
                 .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
                 .andReturn().getResponse().getContentAsString();
 
         assertThat(response).doesNotContain("login-password", member.getPasswordHash());
+        String accessToken = JsonPath.read(response, "$.accessToken");
+        assertThat(jwtTokenProvider.getMemberId(accessToken)).isEqualTo(member.getId());
     }
 
     @Test
