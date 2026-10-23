@@ -1,5 +1,6 @@
 package com.tradeup.backend.trade.controller;
 
+import com.tradeup.backend.auth.jwt.JwtTokenProvider;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -31,6 +32,9 @@ class TradeControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -71,6 +75,7 @@ class TradeControllerIntegrationTest {
         // when & then
         mockMvc.perform(
                         post("/api/trades")
+                                .header("Authorization", "Bearer " + jwtTokenProvider.generateAccessToken(buyer.getId()))
                                 .contentType(MediaType.APPLICATION_JSON)
                                 .content(requestBody)
                 )
@@ -105,6 +110,7 @@ class TradeControllerIntegrationTest {
         // when & then
         mockMvc.perform(
                         post("/api/trades/{tradeId}/accept", trade.getId())
+                                .header("Authorization", "Bearer " + jwtTokenProvider.generateAccessToken(seller.getId()))
                                 .param("sellerId", seller.getId().toString())
                 )
                 .andExpect(status().isOk())
@@ -146,6 +152,7 @@ class TradeControllerIntegrationTest {
         // when & then
         mockMvc.perform(
                         post("/api/trades/{tradeId}/complete", trade.getId())
+                                .header("Authorization", "Bearer " + jwtTokenProvider.generateAccessToken(seller.getId()))
                                 .param("sellerId", seller.getId().toString())
                 )
                 .andExpect(status().isOk())

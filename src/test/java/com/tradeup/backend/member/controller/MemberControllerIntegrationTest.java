@@ -1,5 +1,6 @@
 package com.tradeup.backend.member.controller;
 
+import com.tradeup.backend.auth.jwt.JwtTokenProvider;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import jakarta.persistence.EntityManager;
@@ -25,6 +26,9 @@ class MemberControllerIntegrationTest {
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private JwtTokenProvider jwtTokenProvider;
 
     @Autowired
     private MemberRepository memberRepository;
@@ -63,7 +67,8 @@ class MemberControllerIntegrationTest {
         assertThat(passwordEncoder.matches("api-password", member.getPasswordHash())).isTrue();
         assertThat(response).doesNotContain("api-password", member.getPasswordHash());
 
-        String getResponse = mockMvc.perform(get("/api/members/{memberId}", member.getId()))
+        String getResponse = mockMvc.perform(get("/api/members/{memberId}", member.getId())
+                        .header("Authorization", "Bearer " + jwtTokenProvider.generateAccessToken(member.getId())))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.length()").value(3))
                 .andExpect(jsonPath("$.id").value(member.getId()))
