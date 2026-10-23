@@ -131,7 +131,17 @@ public class TradeService {
         return tradeRepository.findAllByBuyerId(buyerId);
     }
 
-    public List<Trade> getProductTrades(Long productId) {
+    public List<Trade> getProductTrades(
+            Long productId,
+            Long authenticatedMemberId
+    ) {
+        Product product = productRepository.findById(productId)
+                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+
+        if (!product.getSeller().getId().equals(authenticatedMemberId)) {
+            throw new IllegalArgumentException("상품 판매자만 거래 내역을 조회할 수 있습니다.");
+        }
+
         return tradeRepository.findAllByProductId(productId);
     }
 

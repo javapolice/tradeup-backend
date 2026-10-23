@@ -4,6 +4,7 @@ import com.tradeup.backend.trade.domain.Trade;
 import com.tradeup.backend.trade.dto.TradeCreateRequest;
 import com.tradeup.backend.trade.dto.TradeResponse;
 import com.tradeup.backend.trade.service.TradeService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,11 +21,12 @@ public class TradeController {
 
     @PostMapping("/trades")
     public TradeResponse requestTrade(
+            @AuthenticationPrincipal Long authenticatedMemberId,
             @RequestBody TradeCreateRequest request
     ) {
         Trade trade = tradeService.requestTrade(
                 request.productId(),
-                request.buyerId()
+                authenticatedMemberId
         );
 
         return TradeResponse.from(trade);
@@ -33,9 +35,9 @@ public class TradeController {
     @PostMapping("/trades/{tradeId}/accept")
     public TradeResponse acceptTrade(
             @PathVariable Long tradeId,
-            @RequestParam Long sellerId
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        Trade trade = tradeService.acceptTrade(tradeId, sellerId);
+        Trade trade = tradeService.acceptTrade(tradeId, authenticatedMemberId);
 
         return TradeResponse.from(trade);
     }
@@ -43,9 +45,9 @@ public class TradeController {
     @PostMapping("/trades/{tradeId}/reject")
     public TradeResponse rejectTrade(
             @PathVariable Long tradeId,
-            @RequestParam Long sellerId
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        Trade trade = tradeService.rejectTrade(tradeId, sellerId);
+        Trade trade = tradeService.rejectTrade(tradeId, authenticatedMemberId);
 
         return TradeResponse.from(trade);
     }
@@ -53,18 +55,23 @@ public class TradeController {
     @PostMapping("/trades/{tradeId}/complete")
     public TradeResponse completeTrade(
             @PathVariable Long tradeId,
-            @RequestParam Long sellerId
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        Trade trade = tradeService.completeTrade(tradeId, sellerId);
+        Trade trade = tradeService.completeTrade(tradeId, authenticatedMemberId);
 
         return TradeResponse.from(trade);
     }
 
     @GetMapping("/members/{memberId}/purchases")
     public List<TradeResponse> getPurchases(
-            @PathVariable Long memberId
+            @PathVariable Long memberId,
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        return tradeService.getPurchases(memberId)
+        if (!memberId.equals(authenticatedMemberId)) {
+            throw new IllegalArgumentException("본인의 구매 내역만 조회할 수 있습니다.");
+        }
+
+        return tradeService.getPurchases(authenticatedMemberId)
                 .stream()
                 .map(TradeResponse::from)
                 .toList();
@@ -72,9 +79,13 @@ public class TradeController {
 
     @GetMapping("/products/{productId}/trades")
     public List<TradeResponse> getProductTrades(
-            @PathVariable Long productId
+            @PathVariable Long productId,
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        return tradeService.getProductTrades(productId)
+        return tradeService.getProductTrades(
+                        productId,
+                        authenticatedMemberId
+                )
                 .stream()
                 .map(TradeResponse::from)
                 .toList();

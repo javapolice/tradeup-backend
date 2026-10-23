@@ -4,6 +4,7 @@ import com.tradeup.backend.wishlist.domain.Wishlist;
 import com.tradeup.backend.wishlist.dto.WishlistCreateRequest;
 import com.tradeup.backend.wishlist.dto.WishlistResponse;
 import com.tradeup.backend.wishlist.service.WishlistService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -20,10 +21,11 @@ public class WishlistController {
 
     @PostMapping("/wishlists")
     public WishlistResponse addWishlist(
+            @AuthenticationPrincipal Long authenticatedMemberId,
             @RequestBody WishlistCreateRequest request
     ) {
         Wishlist wishlist = wishlistService.addWishlist(
-                request.memberId(),
+                authenticatedMemberId,
                 request.productId()
         );
 
@@ -33,16 +35,21 @@ public class WishlistController {
     @DeleteMapping("/wishlists/{wishlistId}")
     public void deleteWishlist(
             @PathVariable Long wishlistId,
-            @RequestParam Long memberId
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        wishlistService.deleteWishlist(wishlistId, memberId);
+        wishlistService.deleteWishlist(wishlistId, authenticatedMemberId);
     }
 
     @GetMapping("/members/{memberId}/wishlists")
     public List<WishlistResponse> getWishlists(
-            @PathVariable Long memberId
+            @PathVariable Long memberId,
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        return wishlistService.getWishlists(memberId)
+        if (!memberId.equals(authenticatedMemberId)) {
+            throw new IllegalArgumentException("본인의 찜 목록만 조회할 수 있습니다.");
+        }
+
+        return wishlistService.getWishlists(authenticatedMemberId)
                 .stream()
                 .map(WishlistResponse::from)
                 .toList();

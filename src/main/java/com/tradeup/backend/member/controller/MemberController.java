@@ -4,6 +4,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.dto.MemberCreateRequest;
 import com.tradeup.backend.member.dto.MemberResponse;
 import com.tradeup.backend.member.service.MemberService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -27,8 +28,15 @@ public class MemberController {
     }
 
     @GetMapping("/{memberId}")
-    public MemberResponse getMember(@PathVariable Long memberId) {
-        Member member = memberService.getMember(memberId);
+    public MemberResponse getMember(
+            @PathVariable Long memberId,
+            @AuthenticationPrincipal Long authenticatedMemberId
+    ) {
+        if (!memberId.equals(authenticatedMemberId)) {
+            throw new IllegalArgumentException("본인의 회원 정보만 조회할 수 있습니다.");
+        }
+
+        Member member = memberService.getMember(authenticatedMemberId);
 
         return MemberResponse.from(member);
     }

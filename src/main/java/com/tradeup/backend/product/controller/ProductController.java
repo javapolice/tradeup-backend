@@ -5,6 +5,7 @@ import com.tradeup.backend.product.dto.ProductCreateRequest;
 import com.tradeup.backend.product.dto.ProductResponse;
 import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.service.ProductService;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -21,10 +22,11 @@ public class ProductController {
 
     @PostMapping
     public ProductResponse createProduct(
+            @AuthenticationPrincipal Long authenticatedMemberId,
             @RequestBody ProductCreateRequest request
             ) {
         Product product = productService.createProduct(
-                request.sellerId(),
+                authenticatedMemberId,
                 request.title(),
                 request.description(),
                 request.price()
@@ -53,11 +55,12 @@ public class ProductController {
     @PatchMapping("/{productId}")
     public ProductResponse updateProduct(
             @PathVariable Long productId,
+            @AuthenticationPrincipal Long authenticatedMemberId,
             @RequestBody ProductUpdateRequest request
             ) {
         Product product = productService.updateProduct(
                 productId,
-                request.sellerId(),
+                authenticatedMemberId,
                 request.title(),
                 request.description(),
                 request.price()
@@ -69,9 +72,9 @@ public class ProductController {
     @DeleteMapping("/{productId}")
     public void deleteProduct(
             @PathVariable Long productId,
-            @RequestParam Long sellerId
+            @AuthenticationPrincipal Long authenticatedMemberId
     ) {
-        productService.deleteProduct(productId, sellerId);
+        productService.deleteProduct(productId, authenticatedMemberId);
     }
 
 }

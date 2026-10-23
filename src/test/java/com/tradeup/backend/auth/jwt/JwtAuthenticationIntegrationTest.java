@@ -86,8 +86,8 @@ class JwtAuthenticationIntegrationTest {
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"sellerId":%d,"title":"JWT product","description":"test","price":1000}
-                                """.formatted(memberId)))
+                                {"title":"JWT product","description":"test","price":1000}
+                                """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.title").value("JWT product"))
                 .andReturn();
@@ -123,14 +123,13 @@ class JwtAuthenticationIntegrationTest {
 
     @Test
     void JWT_없는_보호_POST는_거부되고_상품이_저장되지_않는다() throws Exception {
-        Member seller = createMember();
         long before = productRepository.count();
 
         mockMvc.perform(post("/api/products")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"sellerId":%d,"title":"Rejected product","description":"test","price":1000}
-                                """.formatted(seller.getId())))
+                                {"title":"Rejected product","description":"test","price":1000}
+                                """))
                 .andExpect(status().isUnauthorized());
 
         assertThat(productRepository.count()).isEqualTo(before);
