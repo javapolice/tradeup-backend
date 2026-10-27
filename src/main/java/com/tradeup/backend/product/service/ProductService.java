@@ -1,5 +1,7 @@
 package com.tradeup.backend.product.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -36,7 +38,10 @@ public class ProductService {
             Long price
     ) {
         Member seller = memberRepository.findById(sellerId)
-                .orElseThrow(() -> new IllegalArgumentException("판매자를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "판매자를 찾을 수 없습니다."
+                ));
 
         Product product = new Product(
                 seller,
@@ -50,7 +55,10 @@ public class ProductService {
 
     public Product getProduct(Long productId) {
         return productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "상품을 찾을 수 없습니다."
+                ));
     }
 
     public List<Product> getSellingProducts() {
@@ -66,10 +74,16 @@ public class ProductService {
             Long price
     ) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "상품을 찾을 수 없습니다."
+                ));
 
         if(!product.getSeller().getId().equals(sellerId)) {
-            throw new IllegalArgumentException("상품 판매자만 수정할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 수정할 수 있습니다."
+            );
         }
 
         product.update(title, description, price);
@@ -83,16 +97,25 @@ public class ProductService {
             Long sellerId
     ) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "상품을 찾을 수 없습니다."
+                ));
 
         if(!product.getSeller().getId().equals(sellerId)) {
-            throw new IllegalArgumentException("상품 판매자만 삭제할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 삭제할 수 있습니다."
+            );
         }
 
         product.validateDeletable();
 
         if (tradeRepository.existsByProductId(productId)) {
-            throw new IllegalStateException("거래 이력이 있는 상품은 삭제할 수 없습니다");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "거래 이력이 있는 상품은 삭제할 수 없습니다."
+            );
         }
 
         wishlistRepository.deleteAllByProductId(productId);

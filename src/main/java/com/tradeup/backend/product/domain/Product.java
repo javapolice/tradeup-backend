@@ -1,5 +1,7 @@
 package com.tradeup.backend.product.domain;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import jakarta.persistence.*;
 
@@ -43,7 +45,10 @@ public class Product {
             Long price
     ) {
         if(status != ProductStatus.SELLING) {
-            throw new IllegalStateException("판매 중인 상품만 수정할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "판매 중인 상품만 수정할 수 있습니다."
+            );
         }
 
         this.title = title;
@@ -53,13 +58,19 @@ public class Product {
 
     public void validateDeletable() {
         if(status != ProductStatus.SELLING) {
-            throw new IllegalStateException("판매 중인 상품만 삭제할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "판매 중인 상품만 삭제할 수 있습니다."
+            );
         }
     }
 
     public void reserve() {
         if (status != ProductStatus.SELLING) {
-            throw new IllegalStateException("판매 중인 상품만 예약할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "판매 중인 상품만 예약할 수 있습니다."
+            );
         }
 
         this.status = ProductStatus.RESERVED;
@@ -67,7 +78,10 @@ public class Product {
 
     public void sold() {
         if (status != ProductStatus.RESERVED) {
-            throw new IllegalStateException("예약된 상품만 판매 완료할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "예약된 상품만 판매 완료할 수 있습니다."
+            );
         }
 
         this.status = ProductStatus.SOLD;

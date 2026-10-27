@@ -1,9 +1,12 @@
 package com.tradeup.backend.trade.controller;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.trade.domain.Trade;
 import com.tradeup.backend.trade.dto.TradeCreateRequest;
 import com.tradeup.backend.trade.dto.TradeResponse;
 import com.tradeup.backend.trade.service.TradeService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,7 +25,7 @@ public class TradeController {
     @PostMapping("/trades")
     public TradeResponse requestTrade(
             @AuthenticationPrincipal Long authenticatedMemberId,
-            @RequestBody TradeCreateRequest request
+            @Valid @RequestBody TradeCreateRequest request
     ) {
         Trade trade = tradeService.requestTrade(
                 request.productId(),
@@ -68,7 +71,10 @@ public class TradeController {
             @AuthenticationPrincipal Long authenticatedMemberId
     ) {
         if (!memberId.equals(authenticatedMemberId)) {
-            throw new IllegalArgumentException("본인의 구매 내역만 조회할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "본인의 구매 내역만 조회할 수 있습니다."
+            );
         }
 
         return tradeService.getPurchases(authenticatedMemberId)

@@ -2,6 +2,7 @@ package com.tradeup.backend.trade.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -10,23 +11,23 @@ import com.tradeup.backend.trade.domain.Trade;
 import com.tradeup.backend.trade.repository.TradeRepository;
 import com.tradeup.backend.trade.service.TradeService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.never;
@@ -35,6 +36,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -88,14 +90,14 @@ class ProductTradesIntegrationTest {
     }
 
     @Test
-    void 구매자_B의_JWT는_거부되고_거래_목록_쿼리를_호출하지_않는다() {
+    void 구매자_B의_JWT는_거부되고_거래_목록_쿼리를_호출하지_않는다() throws Exception {
         Fixture fixture = fixture();
 
         assertNonSellerRejected(fixture.productId(), fixture.buyerId());
     }
 
     @Test
-    void 무관한_회원_C의_JWT도_거부되고_거래_목록_쿼리를_호출하지_않는다() {
+    void 무관한_회원_C의_JWT도_거부되고_거래_목록_쿼리를_호출하지_않는다() throws Exception {
         Fixture fixture = fixture();
 
         assertNonSellerRejected(fixture.productId(), fixture.unrelatedMemberId());
@@ -114,17 +116,14 @@ class ProductTradesIntegrationTest {
     }
 
     @Test
-    void 없는_상품은_상품_없음_예외를_전파하고_거래_목록을_조회하지_않는다() {
+    void 없는_상품은_404이고_거래_목록을_조회하지_않는다() throws Exception {
         Fixture fixture = fixture();
         long missingProductId = Long.MAX_VALUE;
         assertThat(productRepository.existsById(missingProductId)).isFalse();
 
-        assertThatThrownBy(() -> mockMvc.perform(get("/api/products/{productId}/trades", missingProductId)
-                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.sellerId()))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품을 찾을 수 없습니다.");
+        assertProblem(mockMvc.perform(get("/api/products/{productId}/trades", missingProductId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.sellerId()))),
+                404, "NOT_FOUND", "상품을 찾을 수 없습니다.");
 
         verify(tradeRepository, never()).findAllByProductId(anyLong());
     }
@@ -142,15 +141,26 @@ class ProductTradesIntegrationTest {
         verifyNoMoreInteractions(tradeRepository);
     }
 
-    private void assertNonSellerRejected(Long productId, Long memberId) {
-        assertThatThrownBy(() -> mockMvc.perform(get("/api/products/{productId}/trades", productId)
-                        .header(HttpHeaders.AUTHORIZATION, bearer(memberId))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품 판매자만 거래 내역을 조회할 수 있습니다.");
+    private void assertNonSellerRejected(Long productId, Long memberId) throws Exception {
+        assertProblem(mockMvc.perform(get("/api/products/{productId}/trades", productId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(memberId))),
+                403, "FORBIDDEN", "상품 판매자만 거래 내역을 조회할 수 있습니다.");
 
         verify(tradeRepository, never()).findAllByProductId(anyLong());
+    }
+
+    private void assertProblem(ResultActions result, int httpStatus, String code, String detail) throws Exception {
+        result.andExpect(status().is(httpStatus))
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(httpStatus))
+                .andExpect(jsonPath("$.detail").value(detail))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(response -> {
+                    assertThat(response.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+                    BusinessException exception = (BusinessException) response.getResolvedException();
+                    assertThat(exception.getErrorCode().name()).isEqualTo(code);
+                    assertThat(exception.getMessage()).isEqualTo(detail);
+                });
     }
 
     private Fixture fixture() {

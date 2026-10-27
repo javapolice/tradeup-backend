@@ -1,12 +1,15 @@
 package com.tradeup.backend.member.controller;
 
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.member.service.MemberService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -21,13 +24,13 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -80,16 +83,39 @@ class MemberQueryIntegrationTest {
         verifyNoMoreInteractions(memberService);
     }
 
-    @Test
-    void A의_JWT로_B의_정보를_조회하면_Service_호출_전에_거부된다() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void A의_JWT로_B의_정보를_조회하면_Service_호출_전에_거부된다(boolean spoofQuery) throws Exception {
         Fixture fixture = fixture();
+        assertThat(fixture.memberA().getId()).isNotEqualTo(fixture.memberB().getId());
+        assertThat(memberRepository.existsById(fixture.memberB().getId())).isTrue();
+        var request = get("/api/members/{memberId}", fixture.memberB().getId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberA().getId()));
+        if (spoofQuery) {
+            request.param("memberId", fixture.memberA().getId().toString())
+                    .param("authenticatedMemberId", fixture.memberB().getId().toString());
+        }
 
-        assertThatThrownBy(() -> mockMvc.perform(get("/api/members/{memberId}", fixture.memberB().getId())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberA().getId()))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("본인의 회원 정보만 조회할 수 있습니다.");
+        MvcResult result = mockMvc.perform(request)
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.detail").value("본인의 회원 정보만 조회할 수 있습니다."))
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.email").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.nickname").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.password").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.passwordHash").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data").doesNotHaveJsonPath())
+                .andReturn();
+        assertThat(result.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+        BusinessException exception = (BusinessException) result.getResolvedException();
+        assertThat(exception.getErrorCode()).isSameAs(ErrorCode.FORBIDDEN);
+        assertThat(exception.getMessage()).isEqualTo("본인의 회원 정보만 조회할 수 있습니다.");
+        String json = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
+        assertThat(json).doesNotContain(fixture.memberB().getEmail(), fixture.memberB().getNickname(),
+                fixture.memberB().getPasswordHash());
 
         verifyNoInteractions(memberService);
     }
@@ -135,6 +161,27 @@ class MemberQueryIntegrationTest {
         String json = new String(result.getResponse().getContentAsByteArray(), StandardCharsets.UTF_8);
         assertThat(json).doesNotContain(PASSWORD, saved.getPasswordHash());
         verify(memberService).signUp(email, nickname, PASSWORD);
+        verifyNoMoreInteractions(memberService);
+    }
+
+    @Test
+    void JWT와_경로_ID가_같지만_DB에_없는_회원은_404를_반환한다() throws Exception {
+        long missingMemberId = Long.MAX_VALUE;
+        assertThat(memberRepository.existsById(missingMemberId)).isFalse();
+        clearInvocations(memberService);
+
+        // 유효하게 서명된 JWT의 principal과 경로 ID를 일치시켜 소유권 검사를 통과한다.
+        mockMvc.perform(get("/api/members/{memberId}", missingMemberId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(missingMemberId)))
+                .andExpect(status().isNotFound())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.detail").value("회원을 찾을 수 없습니다."))
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isExactlyInstanceOf(BusinessException.class));
+
+        verify(memberService).getMember(missingMemberId);
         verifyNoMoreInteractions(memberService);
     }
 

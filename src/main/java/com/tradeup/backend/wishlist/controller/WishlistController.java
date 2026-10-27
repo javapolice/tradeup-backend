@@ -1,9 +1,12 @@
 package com.tradeup.backend.wishlist.controller;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.wishlist.domain.Wishlist;
 import com.tradeup.backend.wishlist.dto.WishlistCreateRequest;
 import com.tradeup.backend.wishlist.dto.WishlistResponse;
 import com.tradeup.backend.wishlist.service.WishlistService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,7 +25,7 @@ public class WishlistController {
     @PostMapping("/wishlists")
     public WishlistResponse addWishlist(
             @AuthenticationPrincipal Long authenticatedMemberId,
-            @RequestBody WishlistCreateRequest request
+            @Valid @RequestBody WishlistCreateRequest request
     ) {
         Wishlist wishlist = wishlistService.addWishlist(
                 authenticatedMemberId,
@@ -46,7 +49,10 @@ public class WishlistController {
             @AuthenticationPrincipal Long authenticatedMemberId
     ) {
         if (!memberId.equals(authenticatedMemberId)) {
-            throw new IllegalArgumentException("본인의 찜 목록만 조회할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "본인의 찜 목록만 조회할 수 있습니다."
+            );
         }
 
         return wishlistService.getWishlists(authenticatedMemberId)

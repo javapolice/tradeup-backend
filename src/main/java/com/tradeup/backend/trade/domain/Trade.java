@@ -1,5 +1,7 @@
 package com.tradeup.backend.trade.domain;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.product.domain.Product;
 import jakarta.persistence.*;
@@ -34,7 +36,10 @@ public class Trade {
 
     public void accept(){
         if (status != TradeStatus.REQUESTED) {
-            throw new IllegalStateException("요청 중인 거래만 수락할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "요청 중인 거래만 수락할 수 있습니다."
+            );
         }
 
         this.status = TradeStatus.ACCEPTED;
@@ -42,7 +47,10 @@ public class Trade {
 
     public void reject(){
         if (status != TradeStatus.REQUESTED) {
-            throw new IllegalStateException("요청 중인 거래만 거절할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "요청 중인 거래만 거절할 수 있습니다."
+            );
         }
 
         this.status = TradeStatus.REJECTED;
@@ -50,7 +58,10 @@ public class Trade {
 
     public void complete(){
         if (status != TradeStatus.ACCEPTED) {
-            throw new IllegalStateException("수락된 거래만 완료할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "수락된 거래만 완료할 수 있습니다."
+            );
         }
 
         this.status = TradeStatus.COMPLETED;

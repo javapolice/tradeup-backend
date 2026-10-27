@@ -2,11 +2,12 @@ package com.tradeup.backend.member.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.member.service.MemberService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -78,14 +80,14 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void 틀린_비밀번호는_서비스_예외와_메시지가_MockMvc까지_전파된다() throws Exception {
+    void 틀린_비밀번호는_UNAUTHORIZED와_동일한_로그인_실패_메시지를_반환한다() throws Exception {
         Member member = signUpThroughApi();
 
         assertLoginFailure(member.getEmail(), "wrong-password");
     }
 
     @Test
-    void 없는_이메일은_서비스_예외와_메시지가_MockMvc까지_전파된다() {
+    void 없는_이메일은_UNAUTHORIZED와_동일한_로그인_실패_메시지를_반환한다() throws Exception {
         String email = "api-login-missing@test.com";
         assertThat(memberRepository.findByEmail(email)).isEmpty();
 
@@ -93,7 +95,7 @@ class AuthControllerIntegrationTest {
     }
 
     @Test
-    void NULL_해시_기존_회원은_서비스_예외와_메시지가_MockMvc까지_전파된다() {
+    void NULL_해시_기존_회원은_UNAUTHORIZED와_동일한_로그인_실패_메시지를_반환한다() throws Exception {
         String email = "api-login-legacy@test.com";
         // 신규 Member 생성자는 NULL을 금지하므로 기존 DB 회원을 직접 생성한다.
         entityManager.createNativeQuery("INSERT INTO members (email, nickname) VALUES (:email, :nickname)")
@@ -126,19 +128,24 @@ class AuthControllerIntegrationTest {
         return memberRepository.findByEmail("api-login@test.com").orElseThrow();
     }
 
-    private void assertLoginFailure(String email, String password) {
+    private void assertLoginFailure(String email, String password) throws Exception {
         assertThatThrownBy(() -> memberService.login(email, password))
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage(LOGIN_FAILURE_MESSAGE);
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage(LOGIN_FAILURE_MESSAGE)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.UNAUTHORIZED));
 
-        // 전역 예외 처리기가 없어 HTTP 401 대신 ServletException의 원인 예외를 검증한다.
-        assertThatThrownBy(() -> mockMvc.perform(post("/api/auth/login")
+        // 공개 로그인 경로의 실제 Service 예외가 Advice에서 401로 변환되어야 한다.
+        mockMvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(loginBody(email, password))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage(LOGIN_FAILURE_MESSAGE);
+                        .content(loginBody(email, password)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.detail").value(LOGIN_FAILURE_MESSAGE))
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isExactlyInstanceOf(BusinessException.class));
     }
 
     private String loginBody(String email, String password) {

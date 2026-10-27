@@ -1,5 +1,7 @@
 package com.tradeup.backend.member.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.config.PasswordEncoderConfig;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -13,6 +15,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -65,8 +68,10 @@ class MemberServiceTest {
         MemberService service = new MemberService(repository, encoder);
 
         assertThatThrownBy(() -> service.login("member@test.com", "wrong-password"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(LOGIN_FAILURE_MESSAGE);
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage(LOGIN_FAILURE_MESSAGE)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.UNAUTHORIZED));
         verify(encoder).matches("wrong-password", passwordHash);
     }
 
@@ -78,8 +83,10 @@ class MemberServiceTest {
         MemberService service = new MemberService(repository, encoder);
 
         assertThatThrownBy(() -> service.login("missing@test.com", "login-password"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(LOGIN_FAILURE_MESSAGE);
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage(LOGIN_FAILURE_MESSAGE)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.UNAUTHORIZED));
         verify(repository).findByEmail("missing@test.com");
         verifyNoInteractions(encoder);
     }
@@ -95,9 +102,66 @@ class MemberServiceTest {
         MemberService service = new MemberService(repository, encoder);
 
         assertThatThrownBy(() -> service.login("legacy@test.com", "login-password"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage(LOGIN_FAILURE_MESSAGE);
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage(LOGIN_FAILURE_MESSAGE)
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.UNAUTHORIZED));
         verify(repository).findByEmail("legacy@test.com");
+        verifyNoInteractions(encoder);
+    }
+
+    @Test
+    void 이메일_중복은_CONFLICT이며_저장과_암호화를_호출하지_않는다() {
+        MemberRepository repository = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        MemberService service = new MemberService(repository, encoder);
+        when(repository.existsByEmail("duplicate@test.com")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.signUp("duplicate@test.com", "new-nickname", "password"))
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 사용 중인 이메일입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
+
+        verify(repository).existsByEmail("duplicate@test.com");
+        verify(repository, never()).save(any(Member.class));
+        verifyNoInteractions(encoder);
+    }
+
+    @Test
+    void 닉네임_중복은_CONFLICT이며_저장과_암호화를_호출하지_않는다() {
+        MemberRepository repository = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        MemberService service = new MemberService(repository, encoder);
+        when(repository.existsByEmail("new@test.com")).thenReturn(false);
+        when(repository.existsByNickname("duplicate")).thenReturn(true);
+
+        assertThatThrownBy(() -> service.signUp("new@test.com", "duplicate", "password"))
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 사용 중인 닉네임입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
+
+        verify(repository).existsByEmail("new@test.com");
+        verify(repository).existsByNickname("duplicate");
+        verify(repository, never()).save(any(Member.class));
+        verifyNoInteractions(encoder);
+    }
+
+    @Test
+    void 존재하지_않는_회원_조회는_NOT_FOUND이다() {
+        MemberRepository repository = mock(MemberRepository.class);
+        PasswordEncoder encoder = mock(PasswordEncoder.class);
+        MemberService service = new MemberService(repository, encoder);
+        when(repository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getMember(999L))
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("회원을 찾을 수 없습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.NOT_FOUND));
+
+        verify(repository).findById(999L);
         verifyNoInteractions(encoder);
     }
 }

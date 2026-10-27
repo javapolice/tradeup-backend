@@ -1,5 +1,7 @@
 package com.tradeup.backend.product.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -96,6 +98,7 @@ class ProductServiceIntegrationTest {
         );
 
         Trade trade = tradeRepository.save(new Trade(product, buyer));
+        Wishlist wishlist = wishlistRepository.save(new Wishlist(buyer, product));
 
         entityManager.flush();
         entityManager.clear();
@@ -106,13 +109,16 @@ class ProductServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> productService.deleteProduct(product.getId(), seller.getId()))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessage("거래 이력이 있는 상품은 삭제할 수 없습니다");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("거래 이력이 있는 상품은 삭제할 수 없습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();
 
         assertThat(productRepository.findById(product.getId())).isPresent();
         assertThat(tradeRepository.findById(trade.getId())).isPresent();
+        assertThat(wishlistRepository.findById(wishlist.getId())).isPresent();
     }
 }

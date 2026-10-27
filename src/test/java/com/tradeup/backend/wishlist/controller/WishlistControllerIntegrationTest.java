@@ -2,6 +2,7 @@ package com.tradeup.backend.wishlist.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -10,7 +11,6 @@ import com.tradeup.backend.wishlist.domain.Wishlist;
 import com.tradeup.backend.wishlist.repository.WishlistRepository;
 import com.tradeup.backend.wishlist.service.WishlistService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,15 +20,18 @@ import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Comparator;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -121,20 +124,18 @@ class WishlistControllerIntegrationTest {
     }
 
     @Test
-    void B의_JWT로_A의_찜_삭제는_서비스에서_거부되고_DB에_유지된다() {
+    void B의_JWT로_A의_찜_삭제는_서비스에서_거부되고_DB에_유지된다() throws Exception {
         Fixture fixture = fixture();
         Long wishlistId = createWishlist(fixture.memberAId(), fixture.productId());
         Long otherId = createWishlist(fixture.memberBId(), fixture.productId());
         long before = wishlistRepository.count();
 
         // 실제 소유자의 memberId 쿼리를 추가해도 JWT 기반 소유권 검사를 우회할 수 없다.
-        assertThatThrownBy(() -> mockMvc.perform(delete("/api/wishlists/{wishlistId}", wishlistId)
+        assertThat(fixture.memberAId()).isNotEqualTo(fixture.memberBId());
+        assertProblem(mockMvc.perform(delete("/api/wishlists/{wishlistId}", wishlistId)
                         .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberBId()))
-                        .param("memberId", fixture.memberAId().toString())))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("자신의 찜만 취소할 수 있습니다.");
+                        .param("memberId", fixture.memberAId().toString())),
+                403, "FORBIDDEN", "자신의 찜만 취소할 수 있습니다.");
 
         assertStoredWishlist(wishlistId, fixture.memberAId(), fixture.productId());
         assertStoredWishlist(otherId, fixture.memberBId(), fixture.productId());
@@ -172,26 +173,128 @@ class WishlistControllerIntegrationTest {
     }
 
     @Test
-    void 없는_상품의_찜_등록은_기존_예외로_거부되고_DB에_추가되지_않는다() {
+    void 없는_상품의_찜_등록은_404이고_DB에_추가되지_않는다() throws Exception {
         Fixture fixture = fixture();
+        createWishlist(fixture.memberBId(), fixture.productId());
         long missingProductId = Long.MAX_VALUE;
         assertThat(productRepository.existsById(missingProductId)).isFalse();
         long before = wishlistRepository.count();
+        List<WishlistRow> original = wishlistState();
 
-        assertThatThrownBy(() -> mockMvc.perform(post("/api/wishlists")
+        assertProblem(mockMvc.perform(post("/api/wishlists")
                         .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberAId()))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"productId":%d}
-                                """.formatted(missingProductId))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품을 찾을 수 없습니다.");
+                                """.formatted(missingProductId))),
+                404, "NOT_FOUND", "상품을 찾을 수 없습니다.");
 
         flushAndClear();
         assertThat(wishlistRepository.count()).isEqualTo(before);
+        assertThat(wishlistState()).isEqualTo(original);
     }
+
+    @Test
+    void 정상_서명된_JWT의_회원이_DB에_없으면_등록은_404이고_찜은_보존된다() throws Exception {
+        Fixture fixture = fixture();
+        createWishlist(fixture.memberBId(), fixture.productId());
+        List<WishlistRow> original = wishlistState();
+        long missingMemberId = Long.MAX_VALUE;
+        assertThat(memberRepository.existsById(missingMemberId)).isFalse();
+        assertThat(productRepository.existsById(fixture.productId())).isTrue();
+
+        // 정상 서명 JWT를 사용한다. 본문의 존재하는 memberId로 principal을 바꿀 수 없다.
+        assertProblem(mockMvc.perform(post("/api/wishlists")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(missingMemberId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId":%d,"memberId":%d}
+                                """.formatted(fixture.productId(), fixture.memberAId()))),
+                404, "NOT_FOUND", "회원을 찾을 수 없습니다.");
+
+        assertThat(wishlistState()).isEqualTo(original);
+    }
+
+    @Test
+    void 자신의_상품_등록은_409이고_다른_회원의_찜도_보존된다() throws Exception {
+        Fixture fixture = fixture();
+        createWishlist(fixture.memberBId(), fixture.productId());
+        List<WishlistRow> original = wishlistState();
+        Long sellerId = productRepository.findById(fixture.productId()).orElseThrow().getSeller().getId();
+        assertThat(sellerId).isNotEqualTo(fixture.memberAId());
+        assertThat(wishlistRepository.existsByMemberIdAndProductId(sellerId, fixture.productId())).isFalse();
+
+        assertProblem(mockMvc.perform(post("/api/wishlists")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(sellerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId":%d,"memberId":%d}
+                                """.formatted(fixture.productId(), fixture.memberAId()))),
+                409, "CONFLICT", "자신의 상품은 찜할 수 없습니다.");
+
+        assertThat(wishlistState()).isEqualTo(original);
+    }
+
+    @Test
+    void 중복_등록은_409이고_기존_찜의_ID와_소유자와_상품이_보존된다() throws Exception {
+        Fixture fixture = fixture();
+        Long existingId = createWishlist(fixture.memberAId(), fixture.productId());
+        createWishlist(fixture.memberBId(), fixture.productId());
+        List<WishlistRow> original = wishlistState();
+
+        assertProblem(mockMvc.perform(post("/api/wishlists")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberAId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId":%d}
+                                """.formatted(fixture.productId()))),
+                409, "CONFLICT", "이미 찜한 상품입니다.");
+
+        assertThat(wishlistState()).isEqualTo(original);
+        assertStoredWishlist(existingId, fixture.memberAId(), fixture.productId());
+    }
+
+    @Test
+    void 없는_찜_삭제는_404이고_다른_찜을_삭제하지_않는다() throws Exception {
+        Fixture fixture = fixture();
+        createWishlist(fixture.memberAId(), fixture.productId());
+        createWishlist(fixture.memberBId(), fixture.productId());
+        List<WishlistRow> original = wishlistState();
+        long missingWishlistId = Long.MAX_VALUE;
+        assertThat(wishlistRepository.existsById(missingWishlistId)).isFalse();
+
+        assertProblem(mockMvc.perform(delete("/api/wishlists/{wishlistId}", missingWishlistId)
+                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberAId()))),
+                404, "NOT_FOUND", "찜을 찾을 수 없습니다.");
+
+        assertThat(wishlistState()).isEqualTo(original);
+    }
+
+    private void assertProblem(ResultActions result, int httpStatus, String code, String detail) throws Exception {
+        result.andExpect(status().is(httpStatus))
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").isNumber())
+                .andExpect(jsonPath("$.status").value(httpStatus))
+                .andExpect(jsonPath("$.detail").value(detail))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(response -> {
+                    assertThat(response.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+                    BusinessException exception = (BusinessException) response.getResolvedException();
+                    assertThat(exception.getErrorCode().name()).isEqualTo(code);
+                    assertThat(exception.getMessage()).isEqualTo(detail);
+                });
+    }
+
+    private List<WishlistRow> wishlistState() {
+        flushAndClear();
+        return wishlistRepository.findAll().stream()
+                .map(wishlist -> new WishlistRow(wishlist.getId(), wishlist.getMember().getId(),
+                        wishlist.getProduct().getId()))
+                .sorted(Comparator.comparing(WishlistRow::id))
+                .toList();
+    }
+
+    private record WishlistRow(Long id, Long memberId, Long productId) {}
 
     private Fixture fixture() {
         Member seller = saveMember("seller");

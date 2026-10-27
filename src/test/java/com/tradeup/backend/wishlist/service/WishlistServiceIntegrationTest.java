@@ -1,5 +1,7 @@
 package com.tradeup.backend.wishlist.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -54,8 +56,10 @@ class WishlistServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> wishlistService.addWishlist(seller.getId(), product.getId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("자신의 상품은 찜할 수 없습니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("자신의 상품은 찜할 수 없습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();
@@ -86,8 +90,10 @@ class WishlistServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> wishlistService.addWishlist(buyer.getId(), product.getId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 찜한 상품입니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 찜한 상품입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();
@@ -123,8 +129,10 @@ class WishlistServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> wishlistService.deleteWishlist(wishlist.getId(), otherMember.getId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("자신의 찜만 취소할 수 있습니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("자신의 찜만 취소할 수 있습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.FORBIDDEN));
 
         entityManager.flush();
         entityManager.clear();

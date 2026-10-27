@@ -1,5 +1,7 @@
 package com.tradeup.backend.trade.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -233,8 +235,10 @@ class TradeServiceIntegrationTest {
                         buyer.getId()
                 )
         )
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 거래 요청한 상품입니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 거래 요청한 상품입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
     }
 
     @Test
@@ -268,8 +272,10 @@ class TradeServiceIntegrationTest {
                         otherMember.getId()
                 )
         )
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품 판매자만 거래를 수락할 수 있습니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("상품 판매자만 거래를 수락할 수 있습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.FORBIDDEN));
 
         assertThat(trade.getStatus()).isEqualTo(TradeStatus.REQUESTED);
         assertThat(product.getStatus()).isEqualTo(ProductStatus.SELLING);
@@ -291,8 +297,10 @@ class TradeServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> tradeService.requestTrade(product.getId(), seller.getId()))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("자신의 상품은 구매할 수 없습니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("자신의 상품은 구매할 수 없습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();

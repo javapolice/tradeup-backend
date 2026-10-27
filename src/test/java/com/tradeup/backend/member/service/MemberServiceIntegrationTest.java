@@ -1,5 +1,7 @@
 package com.tradeup.backend.member.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -78,8 +80,10 @@ class MemberServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> memberService.signUp(member.getEmail(), "new-member", "test-password"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 사용 중인 이메일입니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 사용 중인 이메일입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();
@@ -99,12 +103,26 @@ class MemberServiceIntegrationTest {
 
         // when & then
         assertThatThrownBy(() -> memberService.signUp("new-member@test.com", member.getNickname(), "test-password"))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 사용 중인 닉네임입니다.");
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("이미 사용 중인 닉네임입니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.CONFLICT));
 
         entityManager.flush();
         entityManager.clear();
 
         assertThat(memberRepository.existsByEmail("new-member@test.com")).isFalse();
+    }
+
+    @Test
+    void DB에_없는_회원_조회는_NOT_FOUND이다() {
+        long missingMemberId = Long.MAX_VALUE;
+        assertThat(memberRepository.existsById(missingMemberId)).isFalse();
+
+        assertThatThrownBy(() -> memberService.getMember(missingMemberId))
+                .isExactlyInstanceOf(BusinessException.class)
+                .hasMessage("회원을 찾을 수 없습니다.")
+                .satisfies(exception -> assertThat(((BusinessException) exception).getErrorCode())
+                        .isSameAs(ErrorCode.NOT_FOUND));
     }
 }

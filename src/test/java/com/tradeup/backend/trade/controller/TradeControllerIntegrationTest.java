@@ -2,6 +2,7 @@ package com.tradeup.backend.trade.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import com.tradeup.backend.member.repository.MemberRepository;
@@ -13,22 +14,24 @@ import com.tradeup.backend.trade.domain.TradeStatus;
 import com.tradeup.backend.trade.repository.TradeRepository;
 import com.tradeup.backend.trade.service.TradeService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
@@ -240,7 +243,7 @@ class TradeControllerIntegrationTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"accept", "reject", "complete"})
-    void 비판매자_JWT의_상태_변경은_거부되고_관련_DB는_불변이다(String action) {
+    void 비판매자_JWT의_상태_변경은_거부되고_관련_DB는_불변이다(String action) throws Exception {
         Fixture fixture = fixture(action.equals("complete"));
         Snapshot before = snapshot(fixture);
         String message = switch (action) {
@@ -250,13 +253,11 @@ class TradeControllerIntegrationTest {
         };
 
         // 제거된 sellerId 쿼리를 조작해도 JWT principal을 바꿀 수 없어야 한다.
-        assertThatThrownBy(() -> mockMvc.perform(post("/api/trades/{tradeId}/{action}", fixture.tradeId(), action)
+        assertThat(fixture.buyerId()).isNotEqualTo(fixture.sellerId());
+        assertProblem(mockMvc.perform(post("/api/trades/{tradeId}/{action}", fixture.tradeId(), action)
                         .header("Authorization", bearer(fixture.buyerId()))
-                        .param("sellerId", fixture.sellerId().toString())))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage(message);
+                        .param("sellerId", fixture.sellerId().toString())),
+                403, "FORBIDDEN", message);
 
         assertThat(snapshot(fixture)).isEqualTo(before);
     }
@@ -286,6 +287,136 @@ class TradeControllerIntegrationTest {
                 .andExpect(status().isUnauthorized());
 
         assertThat(snapshot(fixture)).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"buyer", "product", "self", "duplicate"})
+    void 거래_요청_거부는_정확한_오류를_반환하고_기존_DB를_보존한다(String condition) throws Exception {
+        Fixture fixture = fixture(false);
+        long memberId = fixture.buyerId();
+        long productId = fixture.productId();
+        int httpStatus;
+        String code;
+        String message;
+        switch (condition) {
+            case "buyer" -> {
+                memberId = Long.MAX_VALUE;
+                assertThat(memberRepository.existsById(memberId)).isFalse();
+                httpStatus = 404; code = "NOT_FOUND"; message = "회원을 찾을 수 없습니다.";
+            }
+            case "product" -> {
+                productId = Long.MAX_VALUE;
+                assertThat(productRepository.existsById(productId)).isFalse();
+                httpStatus = 404; code = "NOT_FOUND"; message = "상품을 찾을 수 없습니다.";
+            }
+            case "self" -> {
+                memberId = fixture.sellerId();
+                httpStatus = 409; code = "CONFLICT"; message = "자신의 상품은 구매할 수 없습니다.";
+            }
+            case "duplicate" -> {
+                assertThat(tradeRepository.existsByProductIdAndBuyerIdAndStatus(
+                        productId, memberId, TradeStatus.REQUESTED)).isTrue();
+                httpStatus = 409; code = "CONFLICT"; message = "이미 거래 요청한 상품입니다.";
+            }
+            default -> throw new AssertionError(condition);
+        }
+        Snapshot before = snapshot(fixture);
+
+        assertProblem(mockMvc.perform(post("/api/trades")
+                        .header("Authorization", bearer(memberId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId":%d}
+                                """.formatted(productId))), httpStatus, code, message);
+
+        assertThat(snapshot(fixture)).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = {"RESERVED", "SOLD"})
+    void 판매중이_아닌_상품의_구매_요청은_409이고_DB는_불변이다(ProductStatus productStatus) throws Exception {
+        Fixture fixture = fixture(true);
+        if (productStatus == ProductStatus.SOLD) {
+            tradeService.completeTrade(fixture.tradeId(), fixture.sellerId());
+        }
+        // 기존 요청자는 구매자이며 판매자가 아니다. 상태 오류와 자기 상품 오류를 구분한다.
+        Snapshot before = snapshot(fixture);
+        assertThat(before.productStatus()).isEqualTo(productStatus);
+
+        assertProblem(mockMvc.perform(post("/api/trades")
+                        .header("Authorization", bearer(fixture.buyerId()))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"productId":%d}
+                                """.formatted(fixture.productId()))),
+                409, "CONFLICT", "판매 중인 상품만 거래를 요청할 수 있습니다.");
+
+        assertThat(snapshot(fixture)).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"accept", "reject", "complete"})
+    void 없는_거래의_상태_변경은_404이고_다른_거래와_상품은_불변이다(String action) throws Exception {
+        Fixture fixture = fixture(action.equals("complete"));
+        long missingTradeId = Long.MAX_VALUE;
+        assertThat(tradeRepository.existsById(missingTradeId)).isFalse();
+        Snapshot before = snapshot(fixture);
+
+        assertProblem(mockMvc.perform(post("/api/trades/{tradeId}/{action}", missingTradeId, action)
+                        .header("Authorization", bearer(fixture.sellerId()))),
+                404, "NOT_FOUND", "거래를 찾을 수 없습니다.");
+
+        assertThat(snapshot(fixture)).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "accept, ACCEPTED", "accept, REJECTED", "accept, COMPLETED",
+            "reject, ACCEPTED", "reject, REJECTED", "reject, COMPLETED",
+            "complete, REQUESTED", "complete, REJECTED", "complete, COMPLETED"
+    })
+    void 거래의_금지된_상태_전이는_409이고_DB는_불변이다(String action, TradeStatus initialStatus) throws Exception {
+        Fixture fixture = fixture(false);
+        switch (initialStatus) {
+            case REQUESTED -> { }
+            case REJECTED -> tradeService.rejectTrade(fixture.tradeId(), fixture.sellerId());
+            case ACCEPTED, COMPLETED -> {
+                tradeService.acceptTrade(fixture.tradeId(), fixture.sellerId());
+                if (initialStatus == TradeStatus.COMPLETED) {
+                    tradeService.completeTrade(fixture.tradeId(), fixture.sellerId());
+                }
+            }
+        }
+        Snapshot before = snapshot(fixture);
+        assertThat(before.trades().stream().filter(row -> row.id().equals(fixture.tradeId())).findFirst().orElseThrow().status())
+                .isEqualTo(initialStatus);
+        String message = switch (action) {
+            case "accept" -> "요청 중인 거래만 수락할 수 있습니다.";
+            case "reject" -> "요청 중인 거래만 거절할 수 있습니다.";
+            case "complete" -> "수락된 거래만 완료할 수 있습니다.";
+            default -> throw new AssertionError(action);
+        };
+
+        assertProblem(mockMvc.perform(post("/api/trades/{tradeId}/{action}", fixture.tradeId(), action)
+                        .header("Authorization", bearer(fixture.sellerId()))),
+                409, "CONFLICT", message);
+
+        assertThat(snapshot(fixture)).isEqualTo(before);
+    }
+
+    private void assertProblem(ResultActions result, int httpStatus, String code, String detail) throws Exception {
+        result.andExpect(status().is(httpStatus))
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").isNumber())
+                .andExpect(jsonPath("$.status").value(httpStatus))
+                .andExpect(jsonPath("$.detail").value(detail))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(response -> {
+                    assertThat(response.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+                    BusinessException exception = (BusinessException) response.getResolvedException();
+                    assertThat(exception.getErrorCode().name()).isEqualTo(code);
+                    assertThat(exception.getMessage()).isEqualTo(detail);
+                });
     }
 
     private Fixture fixture(boolean accepted) {

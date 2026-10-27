@@ -2,6 +2,8 @@ package com.tradeup.backend.wishlist.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -9,12 +11,14 @@ import com.tradeup.backend.product.repository.ProductRepository;
 import com.tradeup.backend.wishlist.domain.Wishlist;
 import com.tradeup.backend.wishlist.service.WishlistService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,13 +29,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -86,16 +90,35 @@ class WishlistQueryIntegrationTest {
         verifyNoMoreInteractions(wishlistService);
     }
 
-    @Test
-    void A의_JWT로_B의_목록을_조회하면_Service_호출_전에_거부된다() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void A의_JWT로_B의_목록을_조회하면_Service_호출_전에_거부된다(boolean spoofQuery) throws Exception {
         Fixture fixture = fixture();
+        assertThat(fixture.memberAId()).isNotEqualTo(fixture.memberBId());
+        assertThat(memberRepository.existsById(fixture.memberBId())).isTrue();
+        var request = get("/api/members/{memberId}/wishlists", fixture.memberBId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberAId()));
+        if (spoofQuery) {
+            request.param("memberId", fixture.memberAId().toString())
+                    .param("authenticatedMemberId", fixture.memberBId().toString());
+        }
 
-        assertThatThrownBy(() -> mockMvc.perform(get("/api/members/{memberId}/wishlists", fixture.memberBId())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.memberAId()))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("본인의 찜 목록만 조회할 수 있습니다.");
+        MvcResult result = mockMvc.perform(request)
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.detail").value("본인의 찜 목록만 조회할 수 있습니다."))
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.memberId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.productId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.wishlists").doesNotHaveJsonPath())
+                .andReturn();
+        assertThat(result.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+        BusinessException exception = (BusinessException) result.getResolvedException();
+        assertThat(exception.getErrorCode()).isSameAs(ErrorCode.FORBIDDEN);
+        assertThat(exception.getMessage()).isEqualTo("본인의 찜 목록만 조회할 수 있습니다.");
 
         verifyNoInteractions(wishlistService);
     }

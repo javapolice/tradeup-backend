@@ -5,6 +5,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.dto.LoginRequest;
 import com.tradeup.backend.member.dto.LoginResponse;
 import com.tradeup.backend.member.service.MemberService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -23,7 +24,7 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody LoginRequest request) {
+    public LoginResponse login(@Valid @RequestBody LoginRequest request) {
 
         Member member = memberService.login(request.email(), request.password());
 

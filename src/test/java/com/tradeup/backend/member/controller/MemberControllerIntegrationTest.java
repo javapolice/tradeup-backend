@@ -1,6 +1,7 @@
 package com.tradeup.backend.member.controller;
 
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import jakarta.persistence.EntityManager;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -76,5 +78,70 @@ class MemberControllerIntegrationTest {
                 .andExpect(jsonPath("$.passwordHash").doesNotExist())
                 .andReturn().getResponse().getContentAsString();
         assertThat(getResponse).doesNotContain("api-password", member.getPasswordHash());
+    }
+
+    @Test
+    void 이메일_중복_회원가입은_409와_CONFLICT_상세를_반환하고_DB를_유지한다() throws Exception {
+        Member existing = existingMember();
+        long before = memberRepository.count();
+
+        mockMvc.perform(post("/api/members")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"duplicate-http@test.com","nickname":"new-http-nickname","password":"new-password"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("이미 사용 중인 이메일입니다."))
+                .andExpect(jsonPath("$.code").value("CONFLICT"))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isExactlyInstanceOf(BusinessException.class));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(memberRepository.count()).isEqualTo(before);
+        assertThat(memberRepository.existsByNickname("new-http-nickname")).isFalse();
+        assertExistingMemberUnchanged(existing);
+    }
+
+    @Test
+    void 닉네임_중복_회원가입은_409와_CONFLICT_상세를_반환하고_DB를_유지한다() throws Exception {
+        Member existing = existingMember();
+        long before = memberRepository.count();
+
+        mockMvc.perform(post("/api/members")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"new-http@test.com","nickname":"duplicate-http","password":"new-password"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(409))
+                .andExpect(jsonPath("$.detail").value("이미 사용 중인 닉네임입니다."))
+                .andExpect(jsonPath("$.code").value("CONFLICT"))
+                .andExpect(result -> assertThat(result.getResolvedException())
+                        .isExactlyInstanceOf(BusinessException.class));
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(memberRepository.count()).isEqualTo(before);
+        assertThat(memberRepository.existsByEmail("new-http@test.com")).isFalse();
+        assertExistingMemberUnchanged(existing);
+    }
+
+    private Member existingMember() {
+        Member member = memberRepository.save(new Member(
+                "duplicate-http@test.com", "duplicate-http", passwordEncoder.encode("existing-password")));
+        entityManager.flush();
+        entityManager.clear();
+        return member;
+    }
+
+    private void assertExistingMemberUnchanged(Member existing) {
+        Member saved = memberRepository.findById(existing.getId()).orElseThrow();
+        assertThat(saved.getEmail()).isEqualTo(existing.getEmail());
+        assertThat(saved.getNickname()).isEqualTo(existing.getNickname());
+        assertThat(saved.getPasswordHash()).isEqualTo(existing.getPasswordHash());
     }
 }

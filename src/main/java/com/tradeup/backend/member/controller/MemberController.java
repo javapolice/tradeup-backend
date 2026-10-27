@@ -1,9 +1,12 @@
 package com.tradeup.backend.member.controller;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.dto.MemberCreateRequest;
 import com.tradeup.backend.member.dto.MemberResponse;
 import com.tradeup.backend.member.service.MemberService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -18,7 +21,7 @@ public class MemberController {
     }
 
     @PostMapping
-    public MemberResponse signUp(@RequestBody MemberCreateRequest request) {
+    public MemberResponse signUp(@Valid @RequestBody MemberCreateRequest request) {
         Member member = memberService.signUp(
                 request.email(),
                 request.nickname(),
@@ -33,7 +36,10 @@ public class MemberController {
             @AuthenticationPrincipal Long authenticatedMemberId
     ) {
         if (!memberId.equals(authenticatedMemberId)) {
-            throw new IllegalArgumentException("본인의 회원 정보만 조회할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "본인의 회원 정보만 조회할 수 있습니다."
+            );
         }
 
         Member member = memberService.getMember(authenticatedMemberId);

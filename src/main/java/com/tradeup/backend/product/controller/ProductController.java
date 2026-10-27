@@ -5,6 +5,7 @@ import com.tradeup.backend.product.dto.ProductCreateRequest;
 import com.tradeup.backend.product.dto.ProductResponse;
 import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.service.ProductService;
+import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,7 +24,7 @@ public class ProductController {
     @PostMapping
     public ProductResponse createProduct(
             @AuthenticationPrincipal Long authenticatedMemberId,
-            @RequestBody ProductCreateRequest request
+            @Valid @RequestBody ProductCreateRequest request
             ) {
         Product product = productService.createProduct(
                 authenticatedMemberId,

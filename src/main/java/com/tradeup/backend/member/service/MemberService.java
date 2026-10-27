@@ -1,5 +1,7 @@
 package com.tradeup.backend.member.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import org.springframework.stereotype.Service;
@@ -22,11 +24,17 @@ public class MemberService {
     public Member signUp(String email, String nickname, String password) {
 
         if (memberRepository.existsByEmail(email)) {
-            throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "이미 사용 중인 이메일입니다."
+            );
         }
 
         if (memberRepository.existsByNickname(nickname)) {
-            throw new IllegalArgumentException("이미 사용 중인 닉네임입니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "이미 사용 중인 닉네임입니다."
+            );
         }
 
         Member member = new Member(email, nickname, passwordEncoder.encode(password));
@@ -36,19 +44,26 @@ public class MemberService {
 
     public Member getMember(Long memberId) {
         return memberRepository.findById(memberId)
-                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "회원을 찾을 수 없습니다."
+                ));
     }
 
     public Member login(String email, String password) {
         String errorMsg = "이메일 또는 비밀번호가 올바르지 않습니다.";
-        Member member = memberRepository.findByEmail(email).orElseThrow(() -> new IllegalArgumentException(errorMsg));
+        Member member = memberRepository.findByEmail(email)
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.UNAUTHORIZED,
+                        errorMsg
+                ));
 
         if (member.getPasswordHash() == null) {
-            throw new IllegalArgumentException(errorMsg);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, errorMsg);
         }
 
         if (!passwordEncoder.matches(password, member.getPasswordHash())) {
-            throw new IllegalArgumentException(errorMsg);
+            throw new BusinessException(ErrorCode.UNAUTHORIZED, errorMsg);
         }
 
         return member;

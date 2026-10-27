@@ -2,6 +2,8 @@ package com.tradeup.backend.trade.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -9,12 +11,14 @@ import com.tradeup.backend.product.repository.ProductRepository;
 import com.tradeup.backend.trade.domain.Trade;
 import com.tradeup.backend.trade.service.TradeService;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -25,13 +29,13 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -83,16 +87,35 @@ class TradePurchasesIntegrationTest {
         verifyNoMoreInteractions(tradeService);
     }
 
-    @Test
-    void A의_JWT로_B의_구매_내역을_조회하면_서비스_호출_전에_거부된다() {
+    @ParameterizedTest
+    @ValueSource(booleans = {false, true})
+    void A의_JWT로_B의_구매_내역을_조회하면_서비스_호출_전에_거부된다(boolean spoofQuery) throws Exception {
         Purchases fixture = createPurchases();
+        assertThat(fixture.buyerAId()).isNotEqualTo(fixture.buyerBId());
+        assertThat(memberRepository.existsById(fixture.buyerBId())).isTrue();
+        var request = get("/api/members/{memberId}/purchases", fixture.buyerBId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(fixture.buyerAId()));
+        if (spoofQuery) {
+            request.param("memberId", fixture.buyerAId().toString())
+                    .param("authenticatedMemberId", fixture.buyerBId().toString());
+        }
 
-        assertThatThrownBy(() -> mockMvc.perform(get("/api/members/{memberId}/purchases", fixture.buyerBId())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(fixture.buyerAId()))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("본인의 구매 내역만 조회할 수 있습니다.");
+        MvcResult result = mockMvc.perform(request)
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").value(403))
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"))
+                .andExpect(jsonPath("$.detail").value("본인의 구매 내역만 조회할 수 있습니다."))
+                .andExpect(jsonPath("$.id").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.buyerId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.productId").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.data").doesNotHaveJsonPath())
+                .andExpect(jsonPath("$.purchases").doesNotHaveJsonPath())
+                .andReturn();
+        assertThat(result.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+        BusinessException exception = (BusinessException) result.getResolvedException();
+        assertThat(exception.getErrorCode()).isSameAs(ErrorCode.FORBIDDEN);
+        assertThat(exception.getMessage()).isEqualTo("본인의 구매 내역만 조회할 수 있습니다.");
 
         // B의 구매 내역을 조회하거나 응답 DTO로 변환하기 전에 차단되어야 한다.
         verifyNoInteractions(tradeService);

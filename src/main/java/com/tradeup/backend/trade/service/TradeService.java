@@ -1,5 +1,7 @@
 package com.tradeup.backend.trade.service;
 
+import com.tradeup.backend.global.exception.BusinessException;
+import com.tradeup.backend.global.exception.ErrorCode;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
@@ -33,17 +35,29 @@ public class TradeService {
             Long buyerId
     ) {
         Member buyer = memberRepository.findById(buyerId)
-                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "회원을 찾을 수 없습니다."
+                ));
 
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "상품을 찾을 수 없습니다."
+                ));
 
         if (product.getSeller().getId().equals(buyerId)) {
-            throw new IllegalArgumentException("자신의 상품은 구매할 수 없습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "자신의 상품은 구매할 수 없습니다."
+            );
         }
 
         if (product.getStatus() != ProductStatus.SELLING) {
-            throw new IllegalStateException("판매 중인 상품만 거래를 요청할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "판매 중인 상품만 거래를 요청할 수 있습니다."
+            );
         }
 
         if (tradeRepository.existsByProductIdAndBuyerIdAndStatus(
@@ -51,7 +65,10 @@ public class TradeService {
                 buyerId,
                 TradeStatus.REQUESTED
         )) {
-            throw new IllegalArgumentException("이미 거래 요청한 상품입니다.");
+            throw new BusinessException(
+                    ErrorCode.CONFLICT,
+                    "이미 거래 요청한 상품입니다."
+            );
         }
 
         Trade trade = new Trade(product, buyer);
@@ -65,12 +82,18 @@ public class TradeService {
             Long sellerId
     ) {
         Trade trade = tradeRepository.findById(tradeId)
-                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "거래를 찾을 수 없습니다."
+                ));
 
         Product product = trade.getProduct();
 
         if (!product.getSeller().getId().equals(sellerId)) {
-            throw new IllegalArgumentException("상품 판매자만 거래를 수락할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 거래를 수락할 수 있습니다."
+            );
         }
 
         trade.accept();
@@ -94,12 +117,18 @@ public class TradeService {
             Long sellerId
     ) {
         Trade trade = tradeRepository.findById(tradeId)
-                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "거래를 찾을 수 없습니다."
+                ));
 
         Product product = trade.getProduct();
 
         if (!product.getSeller().getId().equals(sellerId)) {
-            throw new IllegalArgumentException("상품 판매자만 거래를 거절할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 거래를 거절할 수 있습니다."
+            );
         }
 
         trade.reject();
@@ -113,12 +142,18 @@ public class TradeService {
             Long sellerId
     ) {
         Trade trade = tradeRepository.findById(tradeId)
-                .orElseThrow(() -> new IllegalArgumentException("거래를 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "거래를 찾을 수 없습니다."
+                ));
 
         Product product = trade.getProduct();
 
         if (!product.getSeller().getId().equals(sellerId)) {
-            throw new IllegalArgumentException("상품 판매자만 거래를 완료할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 거래를 완료할 수 있습니다."
+            );
         }
 
         trade.complete();
@@ -136,10 +171,16 @@ public class TradeService {
             Long authenticatedMemberId
     ) {
         Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new IllegalArgumentException("상품을 찾을 수 없습니다."));
+                .orElseThrow(() -> new BusinessException(
+                        ErrorCode.NOT_FOUND,
+                        "상품을 찾을 수 없습니다."
+                ));
 
         if (!product.getSeller().getId().equals(authenticatedMemberId)) {
-            throw new IllegalArgumentException("상품 판매자만 거래 내역을 조회할 수 있습니다.");
+            throw new BusinessException(
+                    ErrorCode.FORBIDDEN,
+                    "상품 판매자만 거래 내역을 조회할 수 있습니다."
+            );
         }
 
         return tradeRepository.findAllByProductId(productId);

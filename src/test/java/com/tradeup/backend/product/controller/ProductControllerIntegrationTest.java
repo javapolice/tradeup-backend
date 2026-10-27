@@ -2,14 +2,22 @@ package com.tradeup.backend.product.controller;
 
 import com.jayway.jsonpath.JsonPath;
 import com.tradeup.backend.auth.jwt.JwtTokenProvider;
+import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.service.MemberService;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
 import com.tradeup.backend.product.repository.ProductRepository;
+import com.tradeup.backend.trade.domain.Trade;
+import com.tradeup.backend.trade.domain.TradeStatus;
+import com.tradeup.backend.trade.repository.TradeRepository;
+import com.tradeup.backend.wishlist.domain.Wishlist;
+import com.tradeup.backend.wishlist.repository.WishlistRepository;
 import jakarta.persistence.EntityManager;
-import jakarta.servlet.ServletException;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -17,16 +25,18 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
@@ -45,6 +55,12 @@ class ProductControllerIntegrationTest {
 
     @Autowired
     private ProductRepository productRepository;
+
+    @Autowired
+    private WishlistRepository wishlistRepository;
+
+    @Autowired
+    private TradeRepository tradeRepository;
 
     @Autowired
     private EntityManager entityManager;
@@ -138,44 +154,43 @@ class ProductControllerIntegrationTest {
     }
 
     @Test
-    void A의_JWT로_B의_상품_수정은_서비스에서_거부되고_DB는_변하지_않는다() {
+    void A의_JWT로_B의_상품_수정은_서비스에서_거부되고_DB는_변하지_않는다() throws Exception {
         Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product, TradeStatus.REQUESTED);
         Member attacker = memberService.signUp("product-attacker@test.com", "product-attacker", "password");
         entityManager.flush();
         entityManager.clear();
         long before = productRepository.count();
 
-        // 권한 예외 매핑이 없으므로 MockMvc는 HTTP 응답 대신 ServletException을 전파한다.
-        assertThatThrownBy(() -> mockMvc.perform(patch("/api/products/{productId}", product.getId())
+        assertThat(attacker.getId()).isNotEqualTo(product.getSeller().getId());
+        assertProblem(mockMvc.perform(patch("/api/products/{productId}", product.getId())
                         .header(HttpHeaders.AUTHORIZATION, bearer(attacker.getId()))
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(updateBody())))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품 판매자만 수정할 수 있습니다.");
+                        .content(updateBody())),
+                403, "FORBIDDEN", "상품 판매자만 수정할 수 있습니다.");
 
         assertOriginalProduct(product);
         assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(product, related);
     }
 
     @Test
-    void A의_JWT로_B의_상품_삭제는_서비스에서_거부되고_DB는_변하지_않는다() {
+    void A의_JWT로_B의_상품_삭제는_서비스에서_거부되고_DB는_변하지_않는다() throws Exception {
         Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product, TradeStatus.REQUESTED);
         Member attacker = memberService.signUp("product-attacker@test.com", "product-attacker", "password");
         entityManager.flush();
         entityManager.clear();
         long before = productRepository.count();
 
-        assertThatThrownBy(() -> mockMvc.perform(delete("/api/products/{productId}", product.getId())
-                        .header(HttpHeaders.AUTHORIZATION, bearer(attacker.getId()))))
-                .isInstanceOf(ServletException.class)
-                .cause()
-                .isExactlyInstanceOf(IllegalArgumentException.class)
-                .hasMessage("상품 판매자만 삭제할 수 있습니다.");
+        assertThat(attacker.getId()).isNotEqualTo(product.getSeller().getId());
+        assertProblem(mockMvc.perform(delete("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(attacker.getId()))),
+                403, "FORBIDDEN", "상품 판매자만 삭제할 수 있습니다.");
 
         assertOriginalProduct(product);
         assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(product, related);
     }
 
     @Test
@@ -193,12 +208,198 @@ class ProductControllerIntegrationTest {
     @Test
     void JWT_없는_상품_삭제는_401이고_DB는_변하지_않는다() throws Exception {
         Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product, TradeStatus.REQUESTED);
 
         mockMvc.perform(delete("/api/products/{productId}", product.getId()))
                 .andExpect(status().isUnauthorized());
 
         assertOriginalProduct(product);
+        assertRelatedDataUnchanged(product, related);
     }
+
+    @Test
+    void DB에_없는_JWT_판매자로_등록하면_404이고_상품이_생성되지_않는다() throws Exception {
+        long missingSellerId = Long.MAX_VALUE;
+        assertThat(entityManager.find(Member.class, missingSellerId)).isNull();
+        long before = productRepository.count();
+
+        assertProblem(mockMvc.perform(post("/api/products")
+                        .header(HttpHeaders.AUTHORIZATION, bearer(missingSellerId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(updateBody())),
+                404, "NOT_FOUND", "판매자를 찾을 수 없습니다.");
+
+        entityManager.flush();
+        entityManager.clear();
+        assertThat(productRepository.count()).isEqualTo(before);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"get", "update", "delete"})
+    void 없는_상품의_조회_수정_삭제는_404이며_기존_데이터를_유지한다(String action) throws Exception {
+        Product existing = createOwnedProduct();
+        RelatedData related = createRelatedData(existing, TradeStatus.REQUESTED);
+        long missingProductId = Long.MAX_VALUE;
+        assertThat(productRepository.existsById(missingProductId)).isFalse();
+        long before = productRepository.count();
+        String jwt = bearer(existing.getSeller().getId());
+
+        ResultActions result = switch (action) {
+            case "get" -> mockMvc.perform(get("/api/products/{productId}", missingProductId));
+            case "update" -> mockMvc.perform(patch("/api/products/{productId}", missingProductId)
+                    .header(HttpHeaders.AUTHORIZATION, jwt).contentType(MediaType.APPLICATION_JSON)
+                    .content(updateBody()));
+            case "delete" -> mockMvc.perform(delete("/api/products/{productId}", missingProductId)
+                    .header(HttpHeaders.AUTHORIZATION, jwt));
+            default -> throw new AssertionError(action);
+        };
+        assertProblem(result, 404, "NOT_FOUND", "상품을 찾을 수 없습니다.");
+
+        assertOriginalProduct(existing);
+        assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(existing, related);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = TradeStatus.class, names = {"REQUESTED", "REJECTED"})
+    void SELLING_상품도_거래_이력이_있으면_409이고_상품_찜_거래가_보존된다(TradeStatus tradeStatus) throws Exception {
+        Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product, tradeStatus);
+        assertThat(reloadProduct(product.getId()).getStatus()).isEqualTo(ProductStatus.SELLING);
+        long before = productRepository.count();
+
+        assertProblem(mockMvc.perform(delete("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))),
+                409, "CONFLICT", "거래 이력이 있는 상품은 삭제할 수 없습니다.");
+
+        assertOriginalProduct(product);
+        assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(product, related);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = {"RESERVED", "SOLD"})
+    void 판매중이_아닌_상품_삭제는_409이고_관련_데이터를_보존한다(ProductStatus productStatus) throws Exception {
+        Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product,
+                productStatus == ProductStatus.SOLD ? TradeStatus.COMPLETED : TradeStatus.ACCEPTED);
+        Product managed = productRepository.findById(product.getId()).orElseThrow();
+        managed.reserve();
+        if (productStatus == ProductStatus.SOLD) {
+            managed.sold();
+        }
+        entityManager.flush();
+        entityManager.clear();
+        long before = productRepository.count();
+
+        // 거래 이력 충돌보다 먼저 발생하는 엔티티의 삭제 상태 오류를 검증한다.
+        assertProblem(mockMvc.perform(delete("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))),
+                409, "CONFLICT", "판매 중인 상품만 삭제할 수 있습니다.");
+
+        Product saved = reloadProduct(product.getId());
+        assertProductFieldsUnchanged(saved, product);
+        assertThat(saved.getStatus()).isEqualTo(productStatus);
+        assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(product, related);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = {"RESERVED", "SOLD"})
+    void 판매중이_아닌_상품_수정은_409이고_모든_필드를_보존한다(ProductStatus productStatus) throws Exception {
+        Product product = createOwnedProduct();
+        RelatedData related = createRelatedData(product,
+                productStatus == ProductStatus.SOLD ? TradeStatus.COMPLETED : TradeStatus.ACCEPTED);
+        Product managed = productRepository.findById(product.getId()).orElseThrow();
+        managed.reserve();
+        if (productStatus == ProductStatus.SOLD) managed.sold();
+        entityManager.flush();
+        entityManager.clear();
+        long before = productRepository.count();
+
+        assertProblem(mockMvc.perform(patch("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))
+                        .contentType(MediaType.APPLICATION_JSON).content(updateBody())),
+                409, "CONFLICT", "판매 중인 상품만 수정할 수 있습니다.");
+
+        Product saved = reloadProduct(product.getId());
+        assertProductFieldsUnchanged(saved, product);
+        assertThat(saved.getStatus()).isEqualTo(productStatus);
+        assertThat(productRepository.count()).isEqualTo(before);
+        assertRelatedDataUnchanged(product, related);
+    }
+
+    @Test
+    void 상품_상세와_판매중_목록은_JWT_없이_정상_조회된다() throws Exception {
+        Product product = createOwnedProduct();
+
+        mockMvc.perform(get("/api/products/{productId}", product.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(product.getId()))
+                .andExpect(jsonPath("$.sellerId").value(product.getSeller().getId()))
+                .andExpect(jsonPath("$.title").value("Original title"))
+                .andExpect(jsonPath("$.description").value("Original description"))
+                .andExpect(jsonPath("$.price").value(1000))
+                .andExpect(jsonPath("$.status").value("SELLING"));
+
+        mockMvc.perform(get("/api/products"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[?(@.id == %d)]".formatted(product.getId())).isNotEmpty());
+        assertOriginalProduct(product);
+    }
+
+    private void assertProblem(ResultActions result, int httpStatus, String code, String detail) throws Exception {
+        result.andExpect(status().is(httpStatus))
+                .andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.status").isNumber())
+                .andExpect(jsonPath("$.status").value(httpStatus))
+                .andExpect(jsonPath("$.detail").value(detail))
+                .andExpect(jsonPath("$.code").value(code))
+                .andExpect(response -> {
+                    assertThat(response.getResolvedException()).isExactlyInstanceOf(BusinessException.class);
+                    BusinessException exception = (BusinessException) response.getResolvedException();
+                    assertThat(exception.getErrorCode().name()).isEqualTo(code);
+                    assertThat(exception.getMessage()).isEqualTo(detail);
+                });
+    }
+
+    private RelatedData createRelatedData(Product product, TradeStatus status) {
+        Member buyer = memberService.signUp("product-related@test.com", "product-related", "password");
+        Product managed = productRepository.findById(product.getId()).orElseThrow();
+        Wishlist wishlist = wishlistRepository.save(new Wishlist(buyer, managed));
+        Trade trade = new Trade(managed, buyer);
+        switch (status) {
+            case REQUESTED -> { }
+            case REJECTED -> trade.reject();
+            case ACCEPTED -> trade.accept();
+            case COMPLETED -> {
+                trade.accept();
+                trade.complete();
+            }
+        }
+        tradeRepository.save(trade);
+        entityManager.flush();
+        entityManager.clear();
+        return new RelatedData(wishlist.getId(), trade.getId(), buyer.getId(), status,
+                wishlistRepository.count(), tradeRepository.count());
+    }
+
+    private void assertRelatedDataUnchanged(Product product, RelatedData related) {
+        entityManager.flush();
+        entityManager.clear();
+        Wishlist wishlist = wishlistRepository.findById(related.wishlistId()).orElseThrow();
+        assertThat(wishlist.getMember().getId()).isEqualTo(related.buyerId());
+        assertThat(wishlist.getProduct().getId()).isEqualTo(product.getId());
+        Trade trade = tradeRepository.findById(related.tradeId()).orElseThrow();
+        assertThat(trade.getBuyer().getId()).isEqualTo(related.buyerId());
+        assertThat(trade.getProduct().getId()).isEqualTo(product.getId());
+        assertThat(trade.getStatus()).isEqualTo(related.status());
+        assertThat(wishlistRepository.count()).isEqualTo(related.wishlistCount());
+        assertThat(tradeRepository.count()).isEqualTo(related.tradeCount());
+    }
+
+    private record RelatedData(Long wishlistId, Long tradeId, Long buyerId, TradeStatus status,
+                               long wishlistCount, long tradeCount) {}
 
     private Product createOwnedProduct() {
         Member seller = memberService.signUp("product-owner@test.com", "product-owner", "password");
@@ -220,11 +421,16 @@ class ProductControllerIntegrationTest {
 
     private void assertOriginalProduct(Product original) {
         Product saved = reloadProduct(original.getId());
+        assertProductFieldsUnchanged(saved, original);
+        assertThat(saved.getStatus()).isEqualTo(ProductStatus.SELLING);
+    }
+
+    private void assertProductFieldsUnchanged(Product saved, Product original) {
+        assertThat(saved.getId()).isEqualTo(original.getId());
         assertThat(saved.getSeller().getId()).isEqualTo(original.getSeller().getId());
         assertThat(saved.getTitle()).isEqualTo("Original title");
         assertThat(saved.getDescription()).isEqualTo("Original description");
         assertThat(saved.getPrice()).isEqualTo(1000L);
-        assertThat(saved.getStatus()).isEqualTo(ProductStatus.SELLING);
     }
 
     private Product reloadProduct(Long productId) {
