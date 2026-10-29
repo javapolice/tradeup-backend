@@ -6,6 +6,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
+import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.repository.ProductRepository;
 import com.tradeup.backend.trade.repository.TradeRepository;
 import com.tradeup.backend.wishlist.repository.WishlistRepository;
@@ -69,9 +70,7 @@ public class ProductService {
     public Product updateProduct(
             Long productId,
             Long sellerId,
-            String title,
-            String description,
-            Long price
+            ProductUpdateRequest request
     ) {
         Product product = productRepository.findById(productId)
                 .orElseThrow(() -> new BusinessException(
@@ -86,7 +85,14 @@ public class ProductService {
             );
         }
 
-        product.update(title, description, price);
+        product.update(
+                request.titlePresent(),
+                request.title(),
+                request.descriptionPresent(),
+                request.description(),
+                request.pricePresent(),
+                request.price()
+        );
 
         return product;
     }

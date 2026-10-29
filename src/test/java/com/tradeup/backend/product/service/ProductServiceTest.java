@@ -6,6 +6,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
+import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.repository.ProductRepository;
 import com.tradeup.backend.trade.repository.TradeRepository;
 import com.tradeup.backend.wishlist.repository.WishlistRepository;
@@ -35,6 +36,46 @@ class ProductServiceTest {
     private final ProductService service = new ProductService(products, members, trades, wishlists);
 
     @Test
+    void 부분_수정_DTO의_Present_플래그를_엔티티에_전달한다() {
+        Product product = ownedProduct();
+        when(products.findById(10L)).thenReturn(Optional.of(product));
+
+        Product result = service.updateProduct(10L, 1L,
+                new ProductUpdateRequest(false, "ignored", true, null, false, 999L));
+
+        assertThat(result).isSameAs(product);
+        assertThat(product.getTitle()).isEqualTo("title");
+        assertThat(product.getDescription()).isNull();
+        assertThat(product.getPrice()).isEqualTo(1000L);
+        assertThat(product.getSeller().getId()).isEqualTo(1L);
+        assertThat(product.getStatus()).isEqualTo(ProductStatus.SELLING);
+        verify(products).findById(10L);
+        verifyNoMoreInteractions(products);
+        verifyNoInteractions(members, trades, wishlists);
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = ProductStatus.class, names = {"RESERVED", "SOLD"})
+    void 판매중이_아닌_상품은_부분_수정도_거부한다(ProductStatus status) {
+        Product product = ownedProduct();
+        product.reserve();
+        if (status == ProductStatus.SOLD) product.sold();
+        when(products.findById(10L)).thenReturn(Optional.of(product));
+
+        assertBusinessException(() -> service.updateProduct(10L, 1L,
+                        new ProductUpdateRequest(false, null, true, null, false, null)),
+                ErrorCode.CONFLICT, "판매 중인 상품만 수정할 수 있습니다.");
+
+        assertThat(product.getTitle()).isEqualTo("title");
+        assertThat(product.getDescription()).isEqualTo("description");
+        assertThat(product.getPrice()).isEqualTo(1000L);
+        assertThat(product.getStatus()).isEqualTo(status);
+        verify(products).findById(10L);
+        verifyNoMoreInteractions(products);
+        verifyNoInteractions(members, trades, wishlists);
+    }
+
+    @Test
     void 없는_판매자로_등록하면_NOT_FOUND이며_저장하지_않는다() {
         when(members.findById(99L)).thenReturn(Optional.empty());
 
@@ -53,7 +94,8 @@ class ProductServiceTest {
         assertBusinessException(() -> {
             switch (action) {
                 case "get" -> service.getProduct(99L);
-                case "update" -> service.updateProduct(99L, 1L, "changed", "changed", 2000L);
+                case "update" -> service.updateProduct(99L, 1L,
+                        new ProductUpdateRequest(true, "changed", true, "changed", true, 2000L));
                 case "delete" -> service.deleteProduct(99L, 1L);
                 default -> throw new AssertionError(action);
             }
@@ -75,7 +117,8 @@ class ProductServiceTest {
 
         assertBusinessException(() -> {
             if (action.equals("update")) {
-                service.updateProduct(10L, 2L, "changed", "changed", 2000L);
+                service.updateProduct(10L, 2L,
+                        new ProductUpdateRequest(true, "changed", true, "changed", true, 2000L));
             } else {
                 service.deleteProduct(10L, 2L);
             }

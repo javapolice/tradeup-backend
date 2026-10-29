@@ -40,8 +40,11 @@ public class Product {
     }
 
     public void update(
+            boolean titlePresent,
             String title,
+            boolean descriptionPresent,
             String description,
+            boolean pricePresent,
             Long price
     ) {
         if(status != ProductStatus.SELLING) {
@@ -51,9 +54,17 @@ public class Product {
             );
         }
 
-        this.title = title;
-        this.description = description;
-        this.price = price;
+        if (titlePresent) {
+            this.title = title;
+        }
+
+        if (descriptionPresent) {
+            this.description = description;
+        }
+
+        if (pricePresent) {
+            this.price = price;
+        }
     }
 
     public void validateDeletable() {

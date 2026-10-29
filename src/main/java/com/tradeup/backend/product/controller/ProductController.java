@@ -8,6 +8,7 @@ import com.tradeup.backend.product.service.ProductService;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import tools.jackson.databind.JsonNode;
 
 import java.util.List;
 
@@ -57,14 +58,14 @@ public class ProductController {
     public ProductResponse updateProduct(
             @PathVariable Long productId,
             @AuthenticationPrincipal Long authenticatedMemberId,
-            @RequestBody ProductUpdateRequest request
+            @RequestBody JsonNode json
             ) {
+        ProductUpdateRequest request = ProductUpdateRequest.from(json);
+
         Product product = productService.updateProduct(
                 productId,
                 authenticatedMemberId,
-                request.title(),
-                request.description(),
-                request.price()
+                request
         );
 
         return ProductResponse.from(product);

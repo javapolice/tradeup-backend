@@ -17,6 +17,8 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,6 +31,8 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.stream.Stream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -43,6 +47,113 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 @Transactional
 class ProductControllerIntegrationTest {
+
+    @ParameterizedTest
+    @MethodSource("partialUpdates")
+    void PATCH는_요청한_필드만_응답과_DB에_반영한다(
+            String body, String title, String description, long price) throws Exception {
+        Product product = createOwnedProduct();
+        long count = productRepository.count();
+
+        mockMvc.perform(patch("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(product.getId()))
+                .andExpect(jsonPath("$.sellerId").value(product.getSeller().getId()))
+                .andExpect(jsonPath("$.title").value(title))
+                .andExpect(jsonPath("$.description").value(description == null
+                        ? org.hamcrest.Matchers.nullValue() : org.hamcrest.Matchers.equalTo(description)))
+                .andExpect(jsonPath("$.price").value(price))
+                .andExpect(jsonPath("$.status").value("SELLING"));
+
+        Product saved = reloadProduct(product.getId()); // Flush SQL and discard the first-level cache.
+        assertThat(saved.getTitle()).isEqualTo(title);
+        assertThat(saved.getDescription()).isEqualTo(description);
+        assertThat(saved.getPrice()).isEqualTo(price);
+        assertThat(saved.getSeller().getId()).isEqualTo(product.getSeller().getId());
+        assertThat(saved.getStatus()).isEqualTo(ProductStatus.SELLING);
+        assertThat(productRepository.count()).isEqualTo(count);
+    }
+
+    static Stream<Arguments> partialUpdates() {
+        return Stream.of(
+                Arguments.of("{\"title\":\"Changed\"}", "Changed", "Original description", 1000L),
+                Arguments.of("{\"price\":2000}", "Original title", "Original description", 2000L),
+                Arguments.of("{\"description\":\"Changed\"}", "Original title", "Changed", 1000L),
+                Arguments.of("{\"description\":null}", "Original title", null, 1000L),
+                Arguments.of("{\"description\":\"\"}", "Original title", "", 1000L),
+                Arguments.of("{\"price\":0}", "Original title", "Original description", 0L),
+                Arguments.of("{\"title\":\"Changed\",\"price\":2000}", "Changed", "Original description", 2000L),
+                Arguments.of("{\"title\":\"Changed\",\"description\":null,\"price\":0}", "Changed", null, 0L),
+                Arguments.of("{\"price\":9223372036854775807}", "Original title", "Original description", Long.MAX_VALUE),
+                Arguments.of("{\"title\":\"" + "가".repeat(255) + "\",\"description\":\"" + "나".repeat(255) + "\"}",
+                        "가".repeat(255), "나".repeat(255), 1000L));
+    }
+
+    @ParameterizedTest
+    @MethodSource("com.tradeup.backend.product.support.ProductPatchCases#invalidValues")
+    void 잘못된_PATCH는_공통_400이며_DB를_보존한다(String body) throws Exception {
+        Product product = createOwnedProduct();
+        long count = productRepository.count();
+        ResultActions result = mockMvc.perform(patch("/api/products/{productId}", product.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))
+                .contentType(MediaType.APPLICATION_JSON).content(body));
+
+        assertProblem(result, 400, "INVALID_INPUT", "상품 수정 요청 값이 올바르지 않습니다.");
+        assertSafePatchProblem(result, product.getId());
+        assertOriginalProduct(product);
+        assertThat(productRepository.count()).isEqualTo(count);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " ", "{", "{\"title\":\"PRIVATE_JSON_DIAGNOSTIC\",", "{\"price\":}"})
+    void 본문_누락과_JSON_구문_오류는_일반화된_400이며_DB를_보존한다(String body) throws Exception {
+        Product product = createOwnedProduct();
+        long count = productRepository.count();
+        var builder = patch("/api/products/{productId}", product.getId())
+                .header(HttpHeaders.AUTHORIZATION, bearer(product.getSeller().getId()))
+                .contentType(MediaType.APPLICATION_JSON);
+        if (!body.isEmpty()) builder.content(body); // Empty case sends no body at all.
+        ResultActions result = mockMvc.perform(builder)
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT"))
+                .andExpect(jsonPath("$.detail").value("요청 본문이 없거나 JSON 형식 또는 자료형이 올바르지 않습니다."))
+                .andExpect(response -> assertThat(response.getResolvedException())
+                        .isExactlyInstanceOf(org.springframework.http.converter.HttpMessageNotReadableException.class));
+        assertSafePatchProblem(result, product.getId());
+        assertOriginalProduct(product);
+        assertThat(productRepository.count()).isEqualTo(count);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{\"title\":\"Changed\"}", "{invalid"})
+    void 잘못된_JWT의_PATCH는_본문_검증_전에_401이고_DB를_보존한다(String body) throws Exception {
+        Product product = createOwnedProduct();
+        mockMvc.perform(patch("/api/products/{productId}", product.getId())
+                        .header(HttpHeaders.AUTHORIZATION, "Bearer invalid.jwt.token")
+                        .contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isUnauthorized())
+                .andExpect(response -> {
+                    assertThat(response.getHandler()).isNull();
+                    assertThat(response.getResolvedException()).isNull();
+                    assertThat(response.getResponse().getErrorMessage()).isEqualTo("Invalid or expired JWT");
+                });
+        assertOriginalProduct(product);
+    }
+
+    private void assertSafePatchProblem(ResultActions result, Long productId) throws Exception {
+        MvcResult response = result.andExpect(content().contentType(MediaType.APPLICATION_PROBLEM_JSON))
+                .andExpect(jsonPath("$.title").value("Bad Request"))
+                .andExpect(jsonPath("$.instance").value("/api/products/" + productId))
+                .andReturn();
+        String body = response.getResponse().getContentAsString(StandardCharsets.UTF_8);
+        Map<String, Object> payload = JsonPath.read(body, "$");
+        assertThat(payload).containsOnlyKeys("title", "status", "detail", "instance", "code");
+        assertThat(body).doesNotContain("PRIVATE_JSON_DIAGNOSTIC", "tools.jackson", "java.lang",
+                "com.tradeup.backend", "Exception", "Cannot deserialize");
+    }
 
     @Autowired
     private MockMvc mockMvc;
