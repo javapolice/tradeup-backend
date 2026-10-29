@@ -2,9 +2,17 @@
 
 ## 1. 목적
 
-Phase 1 도메인 모델을 기준으로 초기 데이터베이스 테이블 구조와 주요 제약 조건을 정의한다.
+Phase 1의 초기 테이블 설계와 Phase 1.5의 비밀번호 해시 추가를 반영하여 현재 스키마와 제약 조건을 정의한다. 논리적 규칙은 [도메인 모델](domain-model.md), 실행 방법은 [개발환경](development-environment.md)을 참고한다.
 
-현재 스키마는 `src/main/resources/db/migration`의 Flyway V1~V4 SQL로 관리한다. JPA의 `ddl-auto`는 `none`이며 Hibernate가 테이블을 생성하지 않는다. 모든 테이블의 id는 `BIGSERIAL PRIMARY KEY`이다.
+현재 스키마는 [Flyway migration 디렉터리](../src/main/resources/db/migration)의 V1~V5 SQL로 관리한다. JPA의 `ddl-auto`는 `none`이며 Hibernate가 테이블을 생성하지 않는다. 모든 테이블의 id는 `BIGSERIAL PRIMARY KEY`이다.
+
+| 버전 | 변경 | 단계 |
+|---|---|---|
+| V1 | members 생성 | Phase 1 |
+| V2 | products 생성 | Phase 1 |
+| V3 | wishlists 생성 | Phase 1 |
+| V4 | trades 생성 | Phase 1 |
+| V5 | members.password_hash 추가 | Phase 1.5 |
 
 ## 2. members
 
@@ -13,6 +21,7 @@ Phase 1 도메인 모델을 기준으로 초기 데이터베이스 테이블 구
 - id
 - email
 - nickname
+- password_hash: `VARCHAR(255)`, nullable, V5에서 추가
 
 ### constraints
 
@@ -20,6 +29,14 @@ Phase 1 도메인 모델을 기준으로 초기 데이터베이스 테이블 구
 - email UNIQUE
 - nickname NOT NULL
 - nickname UNIQUE
+
+### 비밀번호 해시와 기존 데이터
+
+[V5](../src/main/resources/db/migration/V5__add_member_password_hash.sql)는 `ALTER TABLE members ADD COLUMN password_hash VARCHAR(255)`만 수행하며 NOT NULL·기본값·기존 데이터 backfill을 추가하지 않는다. 따라서 기존 회원의 해시는 null일 수 있다. JPA 매핑도 이 열을 nullable로 둔다.
+
+신규 회원가입은 MemberService에서 BCrypt 해시를 생성하고 Member 생성자가 null 해시를 거부한다. 이는 **애플리케이션 생성 규칙**이며 DB NOT NULL 제약과 다르다. DB를 직접 조작하면 null 저장이 가능하다. 기존 null 해시 회원은 로그인에서 동일한 자격 증명 실패 401로 처리하며, 비밀번호 재설정이나 기존 해시 보완 절차는 구현되어 있지 않다.
+
+평문 비밀번호·JWT는 이 열이나 별도 인증 테이블에 저장하지 않는다. 비밀번호·해시는 API 응답 DTO에 포함하지 않는다.
 
 ## 3. products
 
@@ -98,5 +115,11 @@ Phase 1 도메인 모델을 기준으로 초기 데이터베이스 테이블 구
 
 ## 7. 현재 제약의 범위
 
-상태는 `VARCHAR(255)`에 enum 이름으로 저장한다. DDL에는 상태값 CHECK, 가격 범위 CHECK, 판매자와 구매자가 달라야 한다는 제약이 없다. 상태 전이와 자기 상품 거래/찜 거부는 현재 Service/Entity에서 검사한다. 요청 값 Validation과 DB 성능 최적화는 향후 검토 대상이다.
+상태는 `VARCHAR(255)`에 enum 이름으로 저장한다. DDL에는 상태값 CHECK, 가격 범위 CHECK, 판매자와 구매자가 달라야 한다는 제약이 없다. 상태 전이와 자기 상품 거래/찜 거부는 현재 Service/Entity에서 검사한다.
+
+Phase 1.5에서 요청 DTO의 Bean Validation과 PATCH의 수동 검증을 적용했다. 제목·설명의 최대 길이와 가격 범위 등의 HTTP 입력 제약은 [API 명세](api-design.md)를 따른다. 입력 검증이 DB CHECK나 동시성 제어를 대신하지는 않는다.
+
+상품 PATCH의 설명 null은 DB의 `description` null로 반영하고 빈 문자열은 빈 문자열로 저장한다. 요청하지 않은 필드는 기존 값을 유지하며 Service의 쓰기 트랜잭션과 JPA Dirty Checking으로 반영한다. JWT principal에 기반한 접근 권한 검사는 애플리케이션에서 수행하며 FK만으로 인증·인가를 보장하지 않는다.
+
+N+1 재현·조회 최적화·성능 측정은 Phase 2, 동시 요청의 정합성은 Phase 3의 후속 과제다. 현재 스키마·순차 요청 테스트를 대규모 트래픽이나 동시성 검증 완료로 해석하지 않는다.
 

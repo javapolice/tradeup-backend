@@ -5,6 +5,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.dto.LoginRequest;
 import com.tradeup.backend.member.dto.LoginResponse;
 import com.tradeup.backend.member.service.MemberService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -23,6 +24,7 @@ public class AuthController {
         this.jwtTokenProvider = jwtTokenProvider;
     }
 
+    @SecurityRequirements
     @PostMapping("/login")
     public LoginResponse login(@Valid @RequestBody LoginRequest request) {
 

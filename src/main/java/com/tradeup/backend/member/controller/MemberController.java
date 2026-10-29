@@ -6,6 +6,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.dto.MemberCreateRequest;
 import com.tradeup.backend.member.dto.MemberResponse;
 import com.tradeup.backend.member.service.MemberService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -20,6 +21,7 @@ public class MemberController {
         this.memberService = memberService;
     }
 
+    @SecurityRequirements
     @PostMapping
     public MemberResponse signUp(@Valid @RequestBody MemberCreateRequest request) {
         Member member = memberService.signUp(

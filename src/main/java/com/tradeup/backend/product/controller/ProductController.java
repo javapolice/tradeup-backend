@@ -5,6 +5,7 @@ import com.tradeup.backend.product.dto.ProductCreateRequest;
 import com.tradeup.backend.product.dto.ProductResponse;
 import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.service.ProductService;
+import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +38,7 @@ public class ProductController {
         return ProductResponse.from(product);
     }
 
+    @SecurityRequirements
     @GetMapping("/{productId}")
     public ProductResponse getProduct(
             @PathVariable Long productId
@@ -46,6 +48,7 @@ public class ProductController {
         return ProductResponse.from(product);
     }
 
+    @SecurityRequirements
     @GetMapping
     public List<ProductResponse> getSellingProducts() {
         return productService.getSellingProducts()

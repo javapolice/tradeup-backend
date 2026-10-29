@@ -1,11 +1,16 @@
 plugins {
 	java
-	id("org.springframework.boot") version "4.1.0"
+	id("org.springframework.boot") version "4.1.2"
 	id("io.spring.dependency-management") version "1.1.7"
 }
 
 group = "com.tradeup"
 version = "0.0.1-SNAPSHOT"
+// Temporary security overrides.
+// Remove when Spring Boot manages patched versions.
+extra["logback.version"] = "1.6.6"
+extra["jackson-2-bom.version"] = "2.21.8"
+extra["jackson-bom.version"] = "3.1.8"
 
 java {
 	toolchain {
@@ -23,6 +28,8 @@ dependencies {
 	runtimeOnly("io.jsonwebtoken:jjwt-impl:$jjwtVersion")
 	runtimeOnly("io.jsonwebtoken:jjwt-jackson:$jjwtVersion")
 
+	// OpenAPI / Swagger UI
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.2.0")
 	implementation("org.springframework.security:spring-security-crypto")
 	implementation("org.springframework.boot:spring-boot-starter-security")
 	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
