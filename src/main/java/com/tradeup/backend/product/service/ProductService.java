@@ -6,6 +6,7 @@ import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.repository.MemberRepository;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
+import com.tradeup.backend.product.dto.ProductListResponse;
 import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.repository.ProductRepository;
 import com.tradeup.backend.trade.repository.TradeRepository;
@@ -62,8 +63,11 @@ public class ProductService {
                 ));
     }
 
-    public List<Product> getSellingProducts() {
-        return productRepository.findAllByStatus(ProductStatus.SELLING);
+    public List<ProductListResponse> getSellingProducts() {
+        return productRepository.findAllByStatus(ProductStatus.SELLING)
+                .stream()
+                .map(ProductListResponse::from)
+                .toList();
     }
 
     @Transactional

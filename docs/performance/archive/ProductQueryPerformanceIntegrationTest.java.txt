@@ -1,0 +1,194 @@
+package com.tradeup.backend.performance;
+
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import com.jayway.jsonpath.JsonPath;
+import com.tradeup.backend.member.domain.Member;
+import com.tradeup.backend.performance.support.IsolatedPostgresTest;
+import com.tradeup.backend.performance.support.MeasuredSqlInspector;
+import com.tradeup.backend.product.domain.Product;
+import com.tradeup.backend.product.service.ProductService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.EntityManagerFactory;
+import org.hibernate.Hibernate;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
+import org.junit.jupiter.api.Disabled;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
+import org.junit.jupiter.api.parallel.Isolated;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.core.env.Environment;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+
+@SpringBootTest(properties = {
+        "spring.jpa.properties.hibernate.generate_statistics=true",
+        "spring.jpa.properties.hibernate.session_factory.statement_inspector="
+                + "com.tradeup.backend.performance.support.MeasuredSqlInspector",
+        "spring.jpa.properties.hibernate.cache.use_second_level_cache=false",
+        "spring.jpa.properties.hibernate.cache.use_query_cache=false",
+        "spring.jpa.properties.hibernate.format_sql=false",
+        "spring.jpa.properties.hibernate.use_sql_comments=false",
+        "logging.level.org.hibernate.SQL=DEBUG"
+})
+@AutoConfigureMockMvc
+@Disabled("Historical Step 2-2 HTTP contract; measurements preserved in docs/performance/step2-2-product-baseline.md. "
+        + "The current nickname contract is covered by ProductNicknameNPlusOneIntegrationTest.")
+@Execution(ExecutionMode.SAME_THREAD)
+@Isolated("Uses SessionFactory-wide statistics and a bounded SQL log appender")
+class ProductQueryPerformanceIntegrationTest extends IsolatedPostgresTest {
+
+    @Autowired private MockMvc mockMvc;
+    @Autowired private EntityManager entityManager;
+    @Autowired private EntityManagerFactory entityManagerFactory;
+    @Autowired private PlatformTransactionManager transactionManager;
+    @Autowired private DataSource dataSource;
+    @Autowired private Environment environment;
+
+    // Calls the real service/repository; retains references only to inspect lazy state.
+    @MockitoSpyBean private ProductService productService;
+
+    @ParameterizedTest(name = "GET /api/products: {0} products with distinct sellers")
+    @ValueSource(ints = {1, 10, 100})
+    void measuresExistingProductListWithoutAnOuterTransaction(int productCount) throws Exception {
+        assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+        assertIsolatedTarget();
+        Map<Long, Long> expectedSellers = createCommittedFixture(productCount);
+        assertThat(expectedSellers).hasSize(productCount);
+        assertThat(expectedSellers.values()).doesNotHaveDuplicates();
+        assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+
+        List<Product> observedProducts = new ArrayList<>();
+        List<Boolean> initializedBeforeDto = new ArrayList<>();
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            List<Product> products = (List<Product>) invocation.callRealMethod();
+            observedProducts.addAll(products);
+            products.forEach(product -> initializedBeforeDto.add(Hibernate.isInitialized(product.getSeller())));
+            return products;
+        }).when(productService).getSellingProducts();
+
+        Statistics statistics = entityManagerFactory.unwrap(SessionFactory.class).getStatistics();
+        assertThat(statistics.isStatisticsEnabled()).isTrue();
+        Logger sqlLogger = (Logger) LoggerFactory.getLogger("org.hibernate.SQL");
+        ListAppender<ILoggingEvent> sqlLog = new ListAppender<>();
+        sqlLog.start();
+        sqlLogger.addAppender(sqlLog);
+
+        MvcResult response;
+        List<String> statements;
+        long preparedStatements;
+        MeasuredSqlInspector.start();
+        statistics.clear();
+        System.out.printf("PRODUCT_BASELINE_BEGIN N=%d%n", productCount);
+        try {
+            response = mockMvc.perform(get("/api/products")).andReturn();
+            preparedStatements = statistics.getPrepareStatementCount();
+            statements = MeasuredSqlInspector.snapshot();
+        } finally {
+            MeasuredSqlInspector.stop();
+            sqlLogger.detachAppender(sqlLog);
+            sqlLog.stop();
+        }
+
+        List<String> normalizedSql = statements.stream().map(ProductQueryPerformanceIntegrationTest::normalize).toList();
+        List<String> loggedSql = sqlLog.list.stream().map(ILoggingEvent::getFormattedMessage)
+                .map(ProductQueryPerformanceIntegrationTest::normalize).toList();
+        long selects = normalizedSql.stream().filter(sql -> sql.startsWith("select ")).count();
+        long initializedAfterDto = observedProducts.stream()
+                .filter(product -> Hibernate.isInitialized(product.getSeller())).count();
+        System.out.printf("PRODUCT_BASELINE N=%d SELECT=%d PREPARED=%d SQL_LOG=%d "
+                        + "SELLER_INITIALIZED_BEFORE=%d AFTER=%d SQL=%s%n",
+                productCount, selects, preparedStatements, loggedSql.size(),
+                initializedBeforeDto.stream().filter(Boolean::booleanValue).count(), initializedAfterDto, normalizedSql);
+
+        assertThat(response.getResponse().getStatus()).isEqualTo(200);
+        assertThat(response.getRequest().isAsyncStarted()).isFalse();
+        assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
+        List<Map<String, Object>> rows = JsonPath.read(response.getResponse().getContentAsString(), "$");
+        assertThat(rows).hasSize(productCount);
+        Map<Long, Long> actualSellers = new LinkedHashMap<>();
+        rows.forEach(row -> {
+            assertThat(row).containsKeys("id", "sellerId", "title", "description", "price", "status");
+            assertThat(row.get("status")).isEqualTo("SELLING");
+            actualSellers.put(((Number) row.get("id")).longValue(), ((Number) row.get("sellerId")).longValue());
+        });
+        assertThat(actualSellers).isEqualTo(expectedSellers);
+        verify(productService).getSellingProducts();
+        verifyNoMoreInteractions(productService);
+
+        // Establish the baseline only after observing SQL and the complete HTTP result.
+        assertThat(normalizedSql).isEqualTo(loggedSql).hasSize(1);
+        assertThat(selects).isEqualTo(1);
+        assertThat(preparedStatements).isEqualTo(statements.size());
+        assertThat(normalizedSql.getFirst()).contains(" from products ", ".status=?")
+                .doesNotContain(" join ", "members");
+        assertThat(statistics.getEntityLoadCount()).isEqualTo(productCount);
+        assertThat(statistics.getEntityInsertCount()).isZero();
+        assertThat(statistics.getEntityUpdateCount()).isZero();
+        assertThat(statistics.getEntityDeleteCount()).isZero();
+        assertThat(statistics.getFlushCount()).isZero();
+        assertThat(observedProducts).hasSize(productCount);
+        assertThat(initializedBeforeDto).hasSize(productCount).containsOnly(false);
+        assertThat(initializedAfterDto).isZero();
+    }
+
+    private void assertIsolatedTarget() throws Exception {
+        try (Connection connection = dataSource.getConnection()) {
+            assertThat(connection.getMetaData().getURL())
+                    .isEqualTo(environment.getRequiredProperty("spring.datasource.url"))
+                    .isEqualTo(environment.getRequiredProperty("spring.flyway.url"))
+                    .doesNotContain(":5432/").contains("/tradeup_performance?");
+            assertThat(connection.getMetaData().getDatabaseMajorVersion()).isEqualTo(18);
+            System.out.println("PRODUCT_BASELINE_TARGET " + connection.getMetaData().getURL());
+        }
+        assertThat(environment.getProperty("spring.jpa.open-in-view", Boolean.class)).isFalse();
+    }
+
+    private Map<Long, Long> createCommittedFixture(int productCount) {
+        return new TransactionTemplate(transactionManager).execute(status -> {
+            entityManager.createQuery("delete from Product").executeUpdate();
+            entityManager.createQuery("delete from Member").executeUpdate();
+            Map<Long, Long> sellers = new LinkedHashMap<>();
+            for (int i = 0; i < productCount; i++) {
+                Member seller = new Member("baseline-" + i + "@test.com", "baseline-" + i, "fixture-only-hash");
+                entityManager.persist(seller);
+                Product product = new Product(seller, "Baseline " + i, "Query baseline", 1000L + i);
+                entityManager.persist(product);
+                sellers.put(product.getId(), seller.getId());
+            }
+            entityManager.flush();
+            entityManager.clear();
+            return sellers;
+        });
+    }
+
+    private static String normalize(String sql) {
+        return sql.trim().replaceAll("\\s+", " ").toLowerCase(Locale.ROOT);
+    }
+}

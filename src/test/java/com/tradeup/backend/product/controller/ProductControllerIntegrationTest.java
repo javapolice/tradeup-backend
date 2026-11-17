@@ -5,6 +5,7 @@ import com.tradeup.backend.auth.jwt.JwtTokenProvider;
 import com.tradeup.backend.global.exception.BusinessException;
 import com.tradeup.backend.member.domain.Member;
 import com.tradeup.backend.member.service.MemberService;
+import com.tradeup.backend.performance.support.IsolatedPostgresTest;
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.domain.ProductStatus;
 import com.tradeup.backend.product.repository.ProductRepository;
@@ -46,7 +47,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
-class ProductControllerIntegrationTest {
+class ProductControllerIntegrationTest extends IsolatedPostgresTest {
 
     @ParameterizedTest
     @MethodSource("partialUpdates")

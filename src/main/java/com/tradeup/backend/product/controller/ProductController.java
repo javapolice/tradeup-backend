@@ -2,6 +2,7 @@ package com.tradeup.backend.product.controller;
 
 import com.tradeup.backend.product.domain.Product;
 import com.tradeup.backend.product.dto.ProductCreateRequest;
+import com.tradeup.backend.product.dto.ProductListResponse;
 import com.tradeup.backend.product.dto.ProductResponse;
 import com.tradeup.backend.product.dto.ProductUpdateRequest;
 import com.tradeup.backend.product.service.ProductService;
@@ -50,11 +51,8 @@ public class ProductController {
 
     @SecurityRequirements
     @GetMapping
-    public List<ProductResponse> getSellingProducts() {
-        return productService.getSellingProducts()
-                .stream()
-                .map(ProductResponse::from)
-                .toList();
+    public List<ProductListResponse> getSellingProducts() {
+        return productService.getSellingProducts();
     }
 
     @PatchMapping("/{productId}")
